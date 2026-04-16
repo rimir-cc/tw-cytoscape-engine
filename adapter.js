@@ -266,6 +266,11 @@ function mapShape(shape) {
 	return shapeMap[shape] || "ellipse";
 }
 
+// Module-level flag to suppress free events during programmatic updates.
+// Must be module-level because adapter instances can be recreated by tw-graph.
+var suppressFreeEvents = false;
+exports.isSuppressingFreeEvents = function() { return suppressFreeEvents; };
+
 // ---- Core engine methods ----
 
 exports.init = function(element, objects, options) {
@@ -319,6 +324,11 @@ exports.init = function(element, objects, options) {
 exports.update = function(objects) {
 	var changes = this.processObjects(objects);
 
+	// Suppress free event handling during programmatic updates.
+	// move() calls trigger Cytoscape free events which would incorrectly
+	// reassign nodes via the cluster handler.
+	suppressFreeEvents = true;
+
 	// Graph-level changes: rebuild stylesheet
 	if (changes.graph) {
 		var stylesheet = buildStylesheet(changes.graph);
@@ -328,19 +338,36 @@ exports.update = function(objects) {
 		this.cy.edges().forEach(applyEdgeStyle);
 	}
 
-	// Node changes
+	// Node changes — two passes:
+	// Pass 1: add/update/delete all nodes, reparent regular nodes only
+	// Pass 2: reparent cluster (compound) nodes
+	// This order prevents move() on a compound from orphaning children
+	// that haven't been reparented yet.
 	if (changes.nodes) {
+		var deferredMoves = []; // cluster parent changes deferred to pass 2
+
+		// Pass 1
 		for (var id in changes.nodes) {
 			var nodeData = changes.nodes[id];
 			if (nodeData === null) {
-				// Delete
 				var ele = this.cy.getElementById(id);
 				if (ele.length) { this.cy.remove(ele); }
 			} else {
 				var existing = this.cy.getElementById(id);
 				if (existing.length && existing.isNode()) {
-					// Update existing node
 					var elemDef = buildNodeElement(id, nodeData);
+					var currentParentId = existing.parent().length ? existing.parent().id() : null;
+					var newParentId = elemDef.data.parent || null;
+					if (currentParentId !== newParentId) {
+						if (id.indexOf("__cluster__") === 0) {
+							// Defer compound node reparenting to pass 2
+							deferredMoves.push({ id: id, newParentId: newParentId });
+						} else {
+							var pos = { x: existing.position("x"), y: existing.position("y") };
+							existing.move({ parent: newParentId });
+							existing.position(pos);
+						}
+					}
 					existing.data(elemDef.data);
 					if (elemDef.position) {
 						existing.position(elemDef.position);
@@ -351,10 +378,35 @@ exports.update = function(objects) {
 					}
 					applyNodeStyle(existing);
 				} else {
-					// Add new node
 					var newElem = buildNodeElement(id, nodeData);
 					var added = this.cy.add(newElem);
 					applyNodeStyle(added);
+				}
+			}
+		}
+
+		// Pass 2: reparent compound (cluster) nodes after all children are settled
+		for (var i = 0; i < deferredMoves.length; i++) {
+			var dm = deferredMoves[i];
+			var ele = this.cy.getElementById(dm.id);
+			if (ele.length) {
+				// Save children positions — move() on compound orphans them
+				var children = ele.children();
+				var childPositions = [];
+				children.forEach(function(c) {
+					childPositions.push({ id: c.id(), x: c.position("x"), y: c.position("y") });
+				});
+				var pos = { x: ele.position("x"), y: ele.position("y") };
+				ele.move({ parent: dm.newParentId });
+				ele.position(pos);
+				// Re-parent orphaned children
+				for (var j = 0; j < childPositions.length; j++) {
+					var cp = childPositions[j];
+					var child = this.cy.getElementById(cp.id);
+					if (child.length) {
+						child.move({ parent: dm.id });
+						child.position({ x: cp.x, y: cp.y });
+					}
 				}
 			}
 		}
@@ -384,6 +436,8 @@ exports.update = function(objects) {
 
 	// Apply cluster container styling after all node/edge changes
 	this.forEachProperty("postApply", this.cy);
+
+	suppressFreeEvents = false;
 };
 
 exports.destroy = function() {

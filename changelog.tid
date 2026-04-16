@@ -6,6 +6,7 @@ type: text/vnd.tiddlywiki
 ! Changelog
 
 |!Version |!Date |!Changes |
+|v0.1.4 |2026-04-16 |Fix cluster nesting: `moveCompoundPreservingChildren()` for safe compound reparenting (save children → move → re-parent). `_userGrabbed` scratch flag prevents children's `free` events from triggering false reassignment. Boundary-based ejection distance (100px past cluster edge, not from grab point). Graph-canvas `height:100%` stylesheet fix. `graph-canvas > div:first-child` selector to avoid stretching popup panel. Removed intermediate `_saveClusterConfig` from `createCluster` to prevent config race. Module-level suppress flag for programmatic moves |
 |v0.1.3 |2026-04-16 |Full vis-network feature parity: add image/circularImage node support, canvas background image, canvas focus/blur/drop events, manipulation actions (add/edit/delete). Smooth edge curve type mapping (dynamic, continuous, curvedCW/CCW, cubicBezier, no). 15 property handlers total |
 |v0.1.2 |2026-04-16 |Per-graph cluster config via `clusterData` parameter. Double-click cluster for inline rename + color picker. Distance-based ejection (200px) with visual border feedback (orange→red). Nested cluster support. Empty cluster minimum size. Skip cluster nodes from tw-graph events. Code cleanup: deduplicate CLUSTER_PREFIX, standardize `_cy` naming. Comprehensive docs + demo tiddlers |
 |v0.1.1 |2026-04-16 |Interactive cluster assignment: drag node onto another to group, drag to empty space to ungroup. Persisted to config tiddler. Label below node (text-valign:bottom), Arial font matching vis-network |

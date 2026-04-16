@@ -51,10 +51,8 @@ exports.init = function(cy) {
  * Show an HTML input overlay on the cluster node for renaming.
  */
 var PALETTE = [
-	null,
-	"#848484", "#2B7CE9", "#D2691E", "#228B22", "#DC143C",
-	"#9932CC", "#FF8C00", "#008B8B", "#B8860B", "#4B0082",
-	"#2F4F4F", "#8B0000", "#006400", "#191970", "#800080"
+	null, "#848484", "#2B7CE9", "#228B22", "#DC143C",
+	"#9932CC", "#FF8C00", "#008B8B", "#191970"
 ];
 
 exports._startInlineEdit = function(node, clusterName) {
@@ -65,6 +63,7 @@ exports._startInlineEdit = function(node, clusterName) {
 	exports._removeInlineEdit.call(this);
 
 	var container = cy.container();
+	var containerRect = container.getBoundingClientRect();
 	var pos = node.renderedPosition();
 	var clusterDef = this._clusterConfig.clusters[clusterName];
 	if (!clusterDef) {
@@ -73,13 +72,19 @@ exports._startInlineEdit = function(node, clusterName) {
 	}
 	var currentColor = clusterDef.color || null;
 
-	// Wrapper panel
+	// Clamp popup position within the container bounds with margin
+	var margin = 20;
+	var px = Math.max(margin, Math.min(pos.x, containerRect.width - margin));
+	var py = Math.max(margin + 40, Math.min(pos.y, containerRect.height - margin));
+
+	// Wrapper panel — positioned inside container, clamped to viewport
 	var panel = document.createElement("div");
 	panel.style.cssText = "position:absolute;z-index:1001;" +
-		"left:" + pos.x + "px;top:" + pos.y + "px;" +
-		"transform:translate(-50%,-50%);" +
+		"left:" + px + "px;top:" + py + "px;" +
+		"transform:translate(-50%,0);" +
 		"background:#fff;border:2px solid #2B7CE9;border-radius:6px;" +
-		"padding:8px;display:flex;flex-direction:column;gap:6px;align-items:center;";
+		"padding:6px 8px;display:flex;flex-direction:row;gap:6px;align-items:center;" +
+		"box-shadow:0 2px 8px rgba(0,0,0,0.2);";
 
 	// Stop all pointer events from leaking through to Cytoscape canvas
 	["mousedown", "mouseup", "click", "dblclick", "pointerdown", "pointerup"].forEach(function(evt) {
@@ -90,14 +95,14 @@ exports._startInlineEdit = function(node, clusterName) {
 	var input = document.createElement("input");
 	input.type = "text";
 	input.value = clusterDef.label || clusterName;
-	input.style.cssText = "font-size:14px;font-family:arial,sans-serif;font-weight:bold;" +
-		"text-align:center;padding:4px 8px;border:1px solid #ccc;" +
-		"border-radius:4px;outline:none;min-width:100px;width:100%;box-sizing:border-box;";
+	input.style.cssText = "font-size:13px;font-family:arial,sans-serif;font-weight:bold;" +
+		"text-align:center;padding:3px 6px;border:1px solid #ccc;" +
+		"border-radius:4px;outline:none;width:90px;box-sizing:border-box;";
 	panel.appendChild(input);
 
 	// Color swatches row
 	var swatchRow = document.createElement("div");
-	swatchRow.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;justify-content:center;";
+	swatchRow.style.cssText = "display:flex;flex-wrap:wrap;gap:2px;justify-content:center;";
 
 	PALETTE.forEach(function(color) {
 		var swatch = document.createElement("div");
@@ -105,7 +110,7 @@ exports._startInlineEdit = function(node, clusterName) {
 		var bg = isNone ? "#fff" : color;
 		var border = (color === currentColor || (isNone && !currentColor))
 			? "2px solid #2B7CE9" : "1px solid #aaa";
-		swatch.style.cssText = "width:18px;height:18px;border-radius:3px;cursor:pointer;" +
+		swatch.style.cssText = "width:16px;height:16px;border-radius:3px;cursor:pointer;" +
 			"background:" + bg + ";border:" + border + ";box-sizing:border-box;";
 		if (isNone) {
 			// Diagonal line for "no color"
@@ -309,12 +314,9 @@ exports.createCluster = function(name, opts) {
 		exports.postApply.call(this, cy);
 	}
 
-	exports._saveClusterConfig.call(this);
-
-	// Force re-render so children become interactive immediately
-	if (cy) {
-		setTimeout(function() { cy.forceRender(); }, 0);
-	}
+	// Don't save here — caller (assignCluster) saves after all assignments are done.
+	// Saving mid-operation triggers TW refresh → process() replaces this._clusterConfig,
+	// causing the caller's config reference to go stale.
 
 	return clusterId;
 };
@@ -414,6 +416,31 @@ exports.deleteCluster = function(name) {
  * Move a node to a new parent, preserving its position.
  * Cytoscape's node.move() resets position, so we save/restore.
  */
+/**
+ * Move a compound (cluster) node to a new parent, preserving children.
+ * Cytoscape's move() on compounds orphans children — save and re-parent them.
+ */
+function moveCompoundPreservingChildren(cy, node, newParentId) {
+	var pos = { x: node.position("x"), y: node.position("y") };
+	var children = node.children();
+	var childData = [];
+	children.forEach(function(c) {
+		childData.push({ id: c.id(), x: c.position("x"), y: c.position("y") });
+	});
+	var nodeId = node.id();
+	node.move({ parent: newParentId });
+	node.position(pos);
+	// Re-parent orphaned children
+	for (var i = 0; i < childData.length; i++) {
+		var cd = childData[i];
+		var child = cy.getElementById(cd.id);
+		if (child.length) {
+			child.move({ parent: nodeId });
+			child.position({ x: cd.x, y: cd.y });
+		}
+	}
+}
+
 function movePreservingPosition(node, parentId) {
 	var pos = { x: node.position("x"), y: node.position("y") };
 	node.move({ parent: parentId });
@@ -487,17 +514,19 @@ exports.assignCluster = function(nodeId, targetId) {
 				// Nest cluster inside another cluster
 				var myName = nodeId.substring(CLUSTER_PREFIX.length);
 				config.clusters[myName].parent = clusterName;
+				// Apply in Cytoscape: move compound, re-parent orphaned children
+				moveCompoundPreservingChildren(cy, node, CLUSTER_PREFIX + clusterName);
 			} else {
 				config.assignments[nodeId] = clusterName;
+				movePreservingPosition(node, CLUSTER_PREFIX + clusterName);
 			}
-			movePreservingPosition(node, CLUSTER_PREFIX + clusterName);
 		}
 	} else {
 		// Remove from cluster
 		if (isClusterNode) {
 			var myName = nodeId.substring(CLUSTER_PREFIX.length);
 			delete config.clusters[myName].parent;
-			movePreservingPosition(node, null);
+			moveCompoundPreservingChildren(cy, node, null);
 		} else {
 			var oldCluster = config.assignments[nodeId];
 			delete config.assignments[nodeId];

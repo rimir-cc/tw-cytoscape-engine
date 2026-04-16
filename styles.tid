@@ -5,8 +5,8 @@ type: text/vnd.tiddlywiki
 /* Ensure Cytoscape container fills available height.
    Without boundingbox wrapper, graph-canvas has no intrinsic height.
    TW auto-<p> between container and graph-canvas also needs fixing. */
-.graph-canvas { height: 100%; }
-.graph-canvas > div { height: 100%; }
+.graph-canvas { height: 100%; position: relative; }
+.graph-canvas > div:first-child { height: 100%; }
 
 /* Fix <p> wrapper inside boundingbox (when used with $boundingbox widget) */
 .boundingbox > p { display: contents; margin: 0; }

@@ -132,15 +132,26 @@ exports.init = function(cy) {
 		};
 	});
 
-	var EJECT_DISTANCE = 200; // pixels from grab point to eject from cluster
+	var EJECT_DISTANCE = 100; // pixels BEYOND cluster boundary to eject
+
+	// Compute how far outside the cluster boundary a point is (0 if inside)
+	function distOutsideBB(bb, x, y) {
+		var dx = 0, dy = 0;
+		if (x < bb.x1) { dx = bb.x1 - x; }
+		else if (x > bb.x2) { dx = x - bb.x2; }
+		if (y < bb.y1) { dy = bb.y1 - y; }
+		else if (y > bb.y2) { dy = y - bb.y2; }
+		return Math.sqrt(dx * dx + dy * dy);
+	}
 
 	cy.on("grab", "node", function(evt) {
 		var node = evt.target;
 		clearNodeBlur();
-		// Store grab position for distance-based ejection
+		// Mark as directly grabbed — children freed from compound drag won't have this
+		node.scratch("_userGrabbed", true);
 		var parent = node.parent();
 		if (parent.length) {
-			node.scratch("_grabPos", { x: node.position("x"), y: node.position("y") });
+			node.scratch("_parentBB", parent.boundingBox());
 			node.scratch("_parentId", parent.id());
 		}
 		if (isClusterNode(node)) { return; }
@@ -150,21 +161,18 @@ exports.init = function(cy) {
 		);
 	});
 
-	// Visual feedback during drag: highlight cluster border when near ejection
+	// Visual feedback: border changes only when node goes beyond cluster boundary
 	cy.on("drag", "node", function(evt) {
 		var node = evt.target;
-		var grabPos = node.scratch("_grabPos");
+		var parentBB = node.scratch("_parentBB");
 		var parentId = node.scratch("_parentId");
-		if (!grabPos || !parentId) { return; }
+		if (!parentBB || !parentId) { return; }
 		var pos = node.position();
-		var dx = pos.x - grabPos.x;
-		var dy = pos.y - grabPos.y;
-		var dist = Math.sqrt(dx * dx + dy * dy);
+		var dist = distOutsideBB(parentBB, pos.x, pos.y);
 		var parentEle = cy.getElementById(parentId);
 		if (!parentEle.length) { return; }
 		var ratio = Math.min(dist / EJECT_DISTANCE, 1);
-		if (ratio > 0.5) {
-			// Fade border from dashed to solid red as node approaches ejection
+		if (dist > 0) {
 			var r = Math.round(255 * ratio);
 			var g = Math.round(100 * (1 - ratio));
 			parentEle.style({
@@ -173,7 +181,7 @@ exports.init = function(cy) {
 				"border-width": 2 + Math.round(ratio * 2)
 			});
 		} else {
-			// Reset to normal cluster style
+			// Inside cluster — reset to normal
 			var clusterHandler = getClusterHandler(self);
 			if (clusterHandler) {
 				clusterHandler.postApply.call(self, cy);
@@ -181,8 +189,16 @@ exports.init = function(cy) {
 		}
 	});
 
+	var adapter = require("$:/plugins/rimir/cytoscape-engine/adapter.js");
+
 	cy.on("free", "node", function(evt) {
 		var node = evt.target;
+		// Skip nodes freed as side-effect of compound parent drag.
+		// Only the directly grabbed node gets _userGrabbed from the grab handler.
+		var wasGrabbed = node.scratch("_userGrabbed");
+		node.removeScratch("_userGrabbed");
+		if (!wasGrabbed) { return; }
+
 		var pos = node.position();
 		var dropTarget = findDropTarget(cy, node);
 		var clusterHandler = getClusterHandler(self);
@@ -194,23 +210,19 @@ exports.init = function(cy) {
 					clusterHandler.assignCluster.call(self, node.id(), dropTarget.id());
 				}
 			} else if (currentParentId) {
-				// Distance-based ejection: only remove if dragged far from grab point
-				var grabPos = node.scratch("_grabPos");
-				if (grabPos) {
-					var dx = pos.x - grabPos.x;
-					var dy = pos.y - grabPos.y;
-					var dist = Math.sqrt(dx * dx + dy * dy);
+				var parentBB = node.scratch("_parentBB");
+				if (parentBB) {
+					var dist = distOutsideBB(parentBB, pos.x, pos.y);
 					if (dist > EJECT_DISTANCE) {
 						clusterHandler.assignCluster.call(self, node.id(), null);
 					}
 				}
 			}
-			// Reset cluster border style
 			var parentId = node.scratch("_parentId");
 			if (parentId) {
 				clusterHandler.postApply.call(self, cy);
 			}
-			node.removeScratch("_grabPos");
+			node.removeScratch("_parentBB");
 			node.removeScratch("_parentId");
 		}
 		if (isClusterNode(node)) { return; }
