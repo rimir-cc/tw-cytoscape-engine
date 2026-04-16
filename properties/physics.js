@@ -31,7 +31,8 @@ exports.init = function(cy) {
 		this._pendingLayout = null;
 		setTimeout(function() {
 			cy.layout(params).run();
-		}, 0);
+			cy.fit(null, 30); // center viewport on all nodes with 30px padding
+		}, 50);
 	}
 };
 
@@ -74,6 +75,7 @@ exports.process = function(objects, changes) {
 			var cy = this._cy;
 			setTimeout(function() {
 				cy.layout(layoutParams).run();
+				cy.fit(null, 30);
 			}, 0);
 		} else {
 			// First init — defer to init() which will pick it up

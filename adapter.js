@@ -306,6 +306,13 @@ exports.init = function(element, objects, options) {
 	this.forEachProperty("postApply", this.cy);
 
 	this.forEachProperty("init", this.cy);
+
+	// Fit viewport to show all nodes (deferred to allow layouts to settle)
+	var cy = this.cy;
+	setTimeout(function() {
+		if (cy.nodes().length > 0) { cy.fit(null, 30); }
+	}, 100);
+
 	this._firstInit = false;
 };
 
