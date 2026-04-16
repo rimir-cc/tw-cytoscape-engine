@@ -25,13 +25,21 @@ exports.properties = {
 
 exports.init = function(cy) {
 	this._cy = cy;
+	// Run deferred layout if process() flagged it before cy existed
+	if (this._pendingLayout) {
+		var params = this._pendingLayout;
+		this._pendingLayout = null;
+		setTimeout(function() {
+			cy.layout(params).run();
+		}, 0);
+	}
 };
 
 exports.process = function(objects, changes) {
-	if (!changes.graph || !this._cy) { return; }
+	if (!changes.graph) { return; }
 	var graph = changes.graph;
-	// Don't run physics if hierarchy is active or physics is off
 	if (graph.physics === false || graph.hierarchy) { return; }
+
 	// Check if any nodes lack positions (need layout)
 	var needsLayout = false;
 	if (changes.nodes) {
@@ -43,26 +51,33 @@ exports.process = function(objects, changes) {
 			}
 		}
 	}
-	// Run cose layout if needed (on first init when nodes have no positions)
+
 	if (needsLayout && !objects.graph) {
-		var cy = this._cy;
-		// Map vis-network physics params to cose equivalents
 		var gravity = (graph.centralGravity || 0.3) * 100;
 		var nodeRepulsion = Math.abs(graph.gravitationalConstant || 2000) * 2;
 		var idealLength = graph.springLength || 95;
 		var elasticity = (graph.springConstant || 0.04) * 2500;
-		// Defer layout to allow all nodes to be added first
-		setTimeout(function() {
-			cy.layout({
-				name: "cose",
-				animate: false,
-				gravity: gravity,
-				nodeRepulsion: function() { return nodeRepulsion; },
-				idealEdgeLength: function() { return idealLength; },
-				edgeElasticity: function() { return elasticity; },
-				numIter: 200,
-				randomize: true
-			}).run();
-		}, 0);
+
+		var layoutParams = {
+			name: "cose",
+			animate: false,
+			gravity: gravity,
+			nodeRepulsion: function() { return nodeRepulsion; },
+			idealEdgeLength: function() { return idealLength; },
+			edgeElasticity: function() { return elasticity; },
+			numIter: 200,
+			randomize: true
+		};
+
+		if (this._cy) {
+			// cy exists (update call, not first init)
+			var cy = this._cy;
+			setTimeout(function() {
+				cy.layout(layoutParams).run();
+			}, 0);
+		} else {
+			// First init — defer to init() which will pick it up
+			this._pendingLayout = layoutParams;
+		}
 	}
 };
