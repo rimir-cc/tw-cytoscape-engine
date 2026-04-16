@@ -225,7 +225,20 @@ exports.init = function(cy) {
 			node.removeScratch("_parentBB");
 			node.removeScratch("_parentId");
 		}
-		if (isClusterNode(node)) { return; }
+		if (isClusterNode(node)) {
+			// Cluster was moved — emit free events for all real (non-cluster)
+			// descendants so tw-graph persists their new positions
+			node.descendants().forEach(function(child) {
+				if (!isClusterNode(child)) {
+					var cPos = child.position();
+					self.onevent(
+						{ type: "free", objectType: "nodes", id: child.id(), event: evt.originalEvent },
+						{ x: cPos.x, y: cPos.y }
+					);
+				}
+			});
+			return;
+		}
 		self.onevent(
 			{ type: "free", objectType: "nodes", id: node.id(), event: evt.originalEvent },
 			{ x: pos.x, y: pos.y }
