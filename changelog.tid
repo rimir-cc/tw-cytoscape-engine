@@ -6,4 +6,6 @@ type: text/vnd.tiddlywiki
 ! Changelog
 
 |!Version |!Date |!Changes |
+|v0.1.2 |2026-04-16 |Per-graph cluster config via `clusterData` parameter. Double-click cluster for inline rename + color picker. Distance-based ejection (200px) with visual border feedback (orange→red). Nested cluster support. Empty cluster minimum size. Skip cluster nodes from tw-graph events. Code cleanup: deduplicate CLUSTER_PREFIX, standardize `_cy` naming. Comprehensive docs + demo tiddlers |
+|v0.1.1 |2026-04-16 |Interactive cluster assignment: drag node onto another to group, drag to empty space to ungroup. Persisted to config tiddler. Label below node (text-valign:bottom), Arial font matching vis-network |
 |v0.1.0 |2026-04-16 |Initial release: Cytoscape.js 3.33.2 engine adapter for tw-graph with compound node support, full event mapping (hover/drag/click/doubleclick), position persistence, COSE physics layout, color contrast auto-detection |

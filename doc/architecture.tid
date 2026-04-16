@@ -13,7 +13,7 @@ type: text/vnd.tiddlywiki
 
 !! Engine adapter pattern
 
-tw-graph discovers engines via `$tw.modules.createClassesFromModules("graphengine")`. Each engine exports a standard interface:
+tw-graph discovers engines via `$tw.modules.createClassesFromModules("graphengine")`. The adapter exports:
 
 |!Export |!Purpose |
 |`name` |Engine identifier (`"Cytoscape"`) |
@@ -22,17 +22,15 @@ tw-graph discovers engines via `$tw.modules.createClassesFromModules("graphengin
 |`update(objects)` |Delta updates — add/update/remove nodes and edges |
 |`destroy()` |Tear down Cytoscape instance and clean up timers |
 |`processObjects(changes)` |Delegate to property handlers before engine update |
-|`handleMessage(message, params)` |Route messages to handler modules |
-|`forEachProperty(method, ...args)` |Invoke lifecycle method on all property handlers |
 
 !! Property handler modules
 
-Each `module-type: cytoscape-property` module declares properties and optional lifecycle hooks:
+Each `module-type: cytoscape-property` module declares properties and lifecycle hooks:
 
 |!Module |!Responsibility |
 |`id.js` |Assign IDs to nodes/edges |
 |`defaults.js` |Apply initial defaults on first init |
-|`events.js` |Map Cytoscape events to tw-graph callbacks with blur debouncing |
+|`events.js` |Map Cytoscape events to tw-graph callbacks, blur debouncing, cluster drag detection |
 |`position.js` |Track node positions (x/y) for persistence |
 |`nodes.js` |Node visual properties: label, size, shape, cluster |
 |`edges.js` |Edge visual properties: arrows, stroke, width, label |
@@ -40,6 +38,7 @@ Each `module-type: cytoscape-property` module declares properties and optional l
 |`layout.js` |Hierarchical layout via breadthfirst |
 |`physics.js` |COSE layout mapped from vis-network physics parameters |
 |`interaction.js` |Zoom, pan, navigation controls |
+|`cluster.js` |Interactive cluster management: config persistence, create/rename/delete/assign |
 
 !! Styling strategy
 
@@ -47,15 +46,44 @@ vis-network uses imperative options per node/edge. Cytoscape uses a declarative 
 
 The adapter uses a hybrid approach:
 
-* ''Base stylesheet'' — built from graph-level defaults in `buildStylesheet()`, applied via `cy.style().fromJson()`
+* ''Base stylesheet'' — built from graph-level defaults in `buildStylesheet()`, applied via `cy.style().fromJson()`. Uses `[label]` selectors to avoid warnings on elements without label data.
 * ''Per-element overrides'' — applied via `ele.style({...})` after data updates, reading from `data._color`, `data._size`, etc.
 
-This avoids expensive stylesheet rebuilds on every node change while keeping the declarative base clean.
+!! Cluster system
+
+Clusters are managed entirely in JavaScript — no wikitext involvement beyond the `clusterData` graph property.
+
+!!! Data flow
+
+# `cluster.process()` reads the JSON config tiddler during `processObjects()`
+# Virtual cluster nodes are injected into `changes.nodes` with `__cluster__` prefix
+# `cluster.postApply()` styles them as dashed containers after every init/update
+# `events.js` detects drop-on-node via bounding box overlap in `findDropTarget()`
+# `cluster.assignCluster()` updates Cytoscape state immediately + persists to config tiddler via `$tw.wiki.addTiddler()`
+
+!!! Ejection detection
+
+* On `grab`: store the node's position in Cytoscape scratch data
+* On `drag`: compute distance from grab position, update cluster border color (orange→red gradient)
+* On `free`: if distance > 200px and no drop target found → eject from cluster
+* On `free`: reset cluster border style via `postApply()`
+
+!!! Module method calling convention
+
+Property handler methods are called with `this` bound to the engine adapter instance (via `forEachProperty`). Inter-method calls within a module must use `exports.methodName.call(this, ...)` to both find the method (on module exports) and preserve the adapter context.
 
 !! Blur debouncing
 
-vis-network fires `blurNode` based on canvas-internal hit testing — moving the mouse from a node to a DOM popup overlay doesn't trigger blur. Cytoscape fires `mouseout` immediately when the pointer leaves the node area for any reason.
+vis-network fires `blurNode` based on canvas-internal hit testing — moving the mouse from a node to a DOM popup overlay doesn't trigger blur. Cytoscape fires `mouseout` immediately when the pointer leaves the node area.
 
 The events handler debounces blur by 200ms and monitors `.graph-popup` elements via DOM event delegation. If the mouse enters a popup within the delay, the blur is cancelled.
+
+!! Drop target detection
+
+`findDropTarget()` separates cluster containers from regular nodes:
+
+# Cluster containers are preferred — if the drop position is inside any cluster's bounding box, pick the smallest (most nested) cluster
+# Regular nodes are fallback — for auto-creating new clusters when dropping node on node
+# Excluded: self, descendants, current parent (prevents false re-assignment)
 
 </$fill>

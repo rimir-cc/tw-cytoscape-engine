@@ -11,57 +11,110 @@ type: text/vnd.tiddlywiki
 <$transclude $tiddler="$:/plugins/rimir/doc-template/templates/page">
 <$fill $name="body">
 
+For live interactive examples, see the [[demo wiki|https://rimir-cc.github.io/tw-demo/]].
+
 !! Basic graph
 
-Standard tw-graph markup — works identically to vis-network:
-
 ```
 <$graph>
-  <$node $tiddler="A" label="Node A"/>
-  <$node $tiddler="B" label="Node B"/>
+  <$node $tiddler="A" label="Node A" color="CornflowerBlue"/>
+  <$node $tiddler="B" label="Node B" color="Coral"/>
+  <$node $tiddler="C" label="Node C" color="MediumSeaGreen"/>
   <$edge $from="A" $to="B"/>
+  <$edge $from="B" $to="C"/>
+  <$edge $from="A" $to="C" stroke="dashed"/>
 </$graph>
 ```
 
-!! Compound nodes (clusters)
+!! Node shapes
 
-The `cluster` attribute groups nodes visually inside a container:
+```
+<$graph physics="no">
+  <$node $tiddler="a" label="dot (default)" $pos="0,0"/>
+  <$node $tiddler="b" label="box" shape="box" $pos="200,0" color="Wheat"/>
+  <$node $tiddler="c" label="diamond" shape="diamond" $pos="400,0" color="Plum"/>
+  <$node $tiddler="d" label="triangle" shape="triangle" $pos="100,150" color="LightCoral"/>
+  <$node $tiddler="e" label="star" shape="star" $pos="300,150" color="Gold"/>
+  <$node $tiddler="f" label="hexagon" shape="hexagon" $pos="500,150" color="PaleGreen"/>
+</$graph>
+```
+
+!! Properties cascade
 
 ```
 <$graph>
-  <$node $tiddler="Engineering" label="Engineering"/>
-  <$node $tiddler="Alice" label="Alice" cluster="Engineering"/>
-  <$node $tiddler="Bob" label="Bob" cluster="Engineering"/>
-  <$node $tiddler="Sales" label="Sales"/>
-  <$node $tiddler="Carol" label="Carol" cluster="Sales"/>
+<$properties $for="nodes" color="LightGray" size="20">
+<$properties $filter="[tag[important]]" color="Crimson" size="35">
+<$properties $for="edges" color="Silver">
+  <$node $tiddler="Hub" label="Hub"/>
+  <$node $tiddler="Leaf1" label="Leaf 1"/>
+  <$node $tiddler="Leaf2" label="Leaf 2"/>
+  <$edge $from="Hub" $to="Leaf1"/>
+  <$edge $from="Hub" $to="Leaf2"/>
+</$properties>
+</$properties>
+</$properties>
 </$graph>
 ```
 
-Alice and Bob render inside an "Engineering" container, Carol inside "Sales".
+!! Interactive clusters
 
-!! Nested clusters
+Enable with `clusterData` graph property. Each graph can use its own config tiddler.
 
-Clusters can nest — a cluster node can itself have a `cluster` attribute:
+```
+<$graph physics="no">
+<$properties.persistent $dataTiddler="$:/config/my-positions">
+<$properties $for="graph" clusterData="$:/config/my-clusters">
+<$properties $for="nodes" color="SteelBlue">
+  <$node $tiddler="Alice" label="Alice" $pos=<<pos>>/>
+  <$node $tiddler="Bob" label="Bob" $pos=<<pos>>/>
+  <$node $tiddler="Carol" label="Carol" $pos=<<pos>>/>
+</$properties>
+</$properties>
+</$properties.persistent>
+</$graph>
+```
+
+# Drag ''Alice'' onto ''Bob'' → creates "Cluster #1"
+# Drag ''Carol'' onto the cluster → adds her
+# Double-click cluster label → rename and pick a color
+# Drag a node far away (200+ px) → removes it from cluster
+
+!! Separate cluster configs
+
+Two graphs with independent cluster configs but shared positions:
+
+```
+<%-- Graph A --%>
+<$graph physics="no">
+<$properties.persistent $dataTiddler="$:/config/shared-positions">
+<$properties $for="graph" clusterData="$:/config/graph-a/clusters">
+  ...
+</$properties>
+</$properties.persistent>
+</$graph>
+
+<%-- Graph B --%>
+<$graph physics="no">
+<$properties.persistent $dataTiddler="$:/config/shared-positions">
+<$properties $for="graph" clusterData="$:/config/graph-b/clusters">
+  ...
+</$properties>
+</$properties.persistent>
+</$graph>
+```
+
+!! Static clusters (declarative)
+
+For hardcoded grouping without drag-drop interaction, set `cluster` directly on `<$node>`. Container nodes use the `__cluster__` prefix:
 
 ```
 <$graph>
-  <$node $tiddler="Company" label="ACME Corp"/>
-  <$node $tiddler="Engineering" label="Engineering" cluster="Company"/>
-  <$node $tiddler="Frontend" label="Frontend" cluster="Engineering"/>
-  <$node $tiddler="Backend" label="Backend" cluster="Engineering"/>
+  <$node $tiddler="__cluster__Engineering" label="Engineering"/>
+  <$node $tiddler="Frontend" label="Frontend" cluster="__cluster__Engineering"/>
+  <$node $tiddler="Backend" label="Backend" cluster="__cluster__Engineering"/>
+  <$edge $from="Frontend" $to="Backend"/>
 </$graph>
 ```
-
-!! Property mapping from vis-network
-
-All standard tw-graph properties work:
-
-|!Property |!Example |!Effect |
-|`color` |`color="DarkViolet"` |Node/edge color |
-|`size` |`size="30"` |Node radius (Cytoscape width = size × 2) |
-|`shape` |`shape="box"` |Maps to Cytoscape shapes (dot→ellipse, box→rectangle) |
-|`arrows` |`arrows="to"` |Arrow direction on edges |
-|`stroke` |`stroke="dashed"` |Edge line style |
-|`label` |`label="text"` |Node/edge label (below node, on edge) |
 
 </$fill>

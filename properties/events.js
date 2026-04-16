@@ -89,9 +89,14 @@ exports.init = function(cy) {
 		}
 	});
 
-	// Node events
+	// Node events — skip virtual cluster nodes for tw-graph callbacks
+	function isClusterNode(node) {
+		return node.id().indexOf(CLUSTER_PREFIX) === 0;
+	}
+
 	cy.on("tap", "node", function(evt) {
 		var node = evt.target;
+		if (isClusterNode(node)) { return; }
 		self.onevent(
 			{ type: "actions", objectType: "nodes", id: node.id(), event: evt.originalEvent },
 			{}
@@ -100,6 +105,7 @@ exports.init = function(cy) {
 
 	cy.on("mouseover", "node", function(evt) {
 		var node = evt.target;
+		if (isClusterNode(node)) { return; }
 		clearNodeBlur(); // cancel any pending blur
 		self.onevent(
 			{ type: "hover", objectType: "nodes", id: node.id(), event: evt.originalEvent },
@@ -109,6 +115,7 @@ exports.init = function(cy) {
 
 	cy.on("mouseout", "node", function(evt) {
 		var node = evt.target;
+		if (isClusterNode(node)) { return; }
 		var id = node.id();
 		var originalEvent = evt.originalEvent;
 		clearNodeBlur();
@@ -125,18 +132,88 @@ exports.init = function(cy) {
 		};
 	});
 
+	var EJECT_DISTANCE = 200; // pixels from grab point to eject from cluster
+
 	cy.on("grab", "node", function(evt) {
 		var node = evt.target;
-		clearNodeBlur(); // dragging cancels blur
+		clearNodeBlur();
+		// Store grab position for distance-based ejection
+		var parent = node.parent();
+		if (parent.length) {
+			node.scratch("_grabPos", { x: node.position("x"), y: node.position("y") });
+			node.scratch("_parentId", parent.id());
+		}
+		if (isClusterNode(node)) { return; }
 		self.onevent(
 			{ type: "drag", objectType: "nodes", id: node.id(), event: evt.originalEvent },
 			{}
 		);
 	});
 
+	// Visual feedback during drag: highlight cluster border when near ejection
+	cy.on("drag", "node", function(evt) {
+		var node = evt.target;
+		var grabPos = node.scratch("_grabPos");
+		var parentId = node.scratch("_parentId");
+		if (!grabPos || !parentId) { return; }
+		var pos = node.position();
+		var dx = pos.x - grabPos.x;
+		var dy = pos.y - grabPos.y;
+		var dist = Math.sqrt(dx * dx + dy * dy);
+		var parentEle = cy.getElementById(parentId);
+		if (!parentEle.length) { return; }
+		var ratio = Math.min(dist / EJECT_DISTANCE, 1);
+		if (ratio > 0.5) {
+			// Fade border from dashed to solid red as node approaches ejection
+			var r = Math.round(255 * ratio);
+			var g = Math.round(100 * (1 - ratio));
+			parentEle.style({
+				"border-style": ratio > 0.85 ? "solid" : "dashed",
+				"border-color": "rgb(" + r + "," + g + ",0)",
+				"border-width": 2 + Math.round(ratio * 2)
+			});
+		} else {
+			// Reset to normal cluster style
+			var clusterHandler = getClusterHandler(self);
+			if (clusterHandler) {
+				clusterHandler.postApply.call(self, cy);
+			}
+		}
+	});
+
 	cy.on("free", "node", function(evt) {
 		var node = evt.target;
 		var pos = node.position();
+		var dropTarget = findDropTarget(cy, node);
+		var clusterHandler = getClusterHandler(self);
+		if (clusterHandler) {
+			var currentParent = node.parent();
+			var currentParentId = currentParent.length ? currentParent.id() : null;
+			if (dropTarget) {
+				if (dropTarget.id() !== currentParentId) {
+					clusterHandler.assignCluster.call(self, node.id(), dropTarget.id());
+				}
+			} else if (currentParentId) {
+				// Distance-based ejection: only remove if dragged far from grab point
+				var grabPos = node.scratch("_grabPos");
+				if (grabPos) {
+					var dx = pos.x - grabPos.x;
+					var dy = pos.y - grabPos.y;
+					var dist = Math.sqrt(dx * dx + dy * dy);
+					if (dist > EJECT_DISTANCE) {
+						clusterHandler.assignCluster.call(self, node.id(), null);
+					}
+				}
+			}
+			// Reset cluster border style
+			var parentId = node.scratch("_parentId");
+			if (parentId) {
+				clusterHandler.postApply.call(self, cy);
+			}
+			node.removeScratch("_grabPos");
+			node.removeScratch("_parentId");
+		}
+		if (isClusterNode(node)) { return; }
 		self.onevent(
 			{ type: "free", objectType: "nodes", id: node.id(), event: evt.originalEvent },
 			{ x: pos.x, y: pos.y }
@@ -192,3 +269,76 @@ exports.destroy = function() {
 		this._eventCleanup.clearEdgeBlur();
 	}
 };
+
+/**
+ * Find the node under the dropped node (excluding itself and its descendants).
+ * Uses bounding box overlap with center-point containment check.
+ */
+var CLUSTER_PREFIX = "__cluster__";
+
+function findDropTarget(cy, droppedNode) {
+	var pos = droppedNode.position();
+	var droppedId = droppedNode.id();
+	// Exclude self, descendants, and current parent
+	var descendants = droppedNode.descendants();
+	var descendantIds = Object.create(null);
+	descendants.forEach(function(d) { descendantIds[d.id()] = true; });
+	var currentParent = droppedNode.parent();
+	var currentParentId = currentParent.length ? currentParent.id() : null;
+
+	var clusterHits = [];
+	var nodeHits = [];
+
+	cy.nodes().forEach(function(n) {
+		if (n.id() === droppedId) { return; }
+		if (n.id() === currentParentId) { return; }
+		if (descendantIds[n.id()]) { return; }
+		var bb = n.boundingBox();
+		if (pos.x >= bb.x1 && pos.x <= bb.x2 && pos.y >= bb.y1 && pos.y <= bb.y2) {
+			if (n.id().indexOf(CLUSTER_PREFIX) === 0) {
+				clusterHits.push(n);
+			} else {
+				nodeHits.push(n);
+			}
+		}
+	});
+
+	// Prefer cluster containers: pick the smallest (most nested) cluster hit
+	if (clusterHits.length > 0) {
+		var best = null;
+		var bestArea = Infinity;
+		clusterHits.forEach(function(n) {
+			var bb = n.boundingBox();
+			var area = (bb.x2 - bb.x1) * (bb.y2 - bb.y1);
+			if (area < bestArea) { bestArea = area; best = n; }
+		});
+		return best;
+	}
+
+	// Fall back to regular nodes (for auto-creating clusters from two nodes)
+	if (nodeHits.length > 0) {
+		var best = null;
+		var bestArea = Infinity;
+		nodeHits.forEach(function(n) {
+			var bb = n.boundingBox();
+			var area = (bb.x2 - bb.x1) * (bb.y2 - bb.y1);
+			if (area < bestArea) { bestArea = area; best = n; }
+		});
+		return best;
+	}
+
+	return null;
+}
+
+/**
+ * Get the cluster property handler from the engine's property handlers.
+ */
+function getClusterHandler(engine) {
+	var handlers = $tw.modules.getModulesByTypeAsHashmap("cytoscape-property");
+	for (var name in handlers) {
+		if (handlers[name].assignCluster) {
+			return handlers[name];
+		}
+	}
+	return null;
+}

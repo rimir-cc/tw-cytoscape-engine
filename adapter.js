@@ -114,7 +114,6 @@ function buildEdgeElement(id, edge) {
  */
 function buildStylesheet(graphOpts) {
 	var nodeStyle = {
-		"label": "data(label)",
 		"text-valign": "bottom",
 		"text-halign": "center",
 		"text-margin-y": 4,
@@ -131,14 +130,16 @@ function buildStylesheet(graphOpts) {
 		"text-max-width": "120px"
 	};
 	var edgeStyle = {
-		"label": "data(label)",
 		"width": 1,
 		"line-color": "#848484",
 		"target-arrow-color": "#848484",
 		"target-arrow-shape": "triangle",
 		"curve-style": "bezier",
 		"font-family": "arial, sans-serif",
-		"font-size": "12px",
+		"font-size": "12px"
+	};
+	var edgeLabelStyle = {
+		"label": "data(label)",
 		"text-rotation": "autorotate"
 	};
 	var parentStyle = {
@@ -166,8 +167,10 @@ function buildStylesheet(graphOpts) {
 	}
 	return [
 		{ selector: "node", style: nodeStyle },
+		{ selector: "node[label]", style: { "label": "data(label)" } },
 		{ selector: "node:parent", style: parentStyle },
 		{ selector: "edge", style: edgeStyle },
+		{ selector: "edge[label]", style: edgeLabelStyle },
 		{ selector: "node:selected", style: { "border-width": 3, "border-color": "#2B7CE9" } },
 		{ selector: "edge:selected", style: { "width": 3, "line-color": "#2B7CE9" } }
 	];
@@ -268,7 +271,7 @@ exports.init = function(element, objects, options) {
 		elements: elements,
 		style: stylesheet,
 		layout: { name: "preset" },
-		wheelSensitivity: 0.3,
+		wheelSensitivity: 1,
 		boxSelectionEnabled: true,
 		selectionType: "additive"
 	});
@@ -281,6 +284,9 @@ exports.init = function(element, objects, options) {
 	// Apply per-element styles
 	this.cy.nodes().forEach(applyNodeStyle);
 	this.cy.edges().forEach(applyEdgeStyle);
+
+	// Apply cluster container styling
+	this.forEachProperty("postApply", this.cy);
 
 	this.forEachProperty("init", this.cy);
 	this._firstInit = false;
@@ -351,6 +357,9 @@ exports.update = function(objects) {
 			}
 		}
 	}
+
+	// Apply cluster container styling after all node/edge changes
+	this.forEachProperty("postApply", this.cy);
 };
 
 exports.destroy = function() {

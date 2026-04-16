@@ -8,11 +8,12 @@ An alternative graph rendering engine for [[tw-graph|$:/plugins/flibbles/graph]]
 !! Key Features
 
 * ''Drop-in replacement'' for vis-network — existing `<$graph>` markup works unchanged
-* ''Compound/container nodes'' — group nodes visually by setting a `cluster` attribute on `<$node>`
-* ''COSE layout'' — Compound Spring Embedder layout that handles nested node groups natively
+* ''Interactive clusters'' — drag nodes onto each other to group, double-click to rename/color, drag away to remove
+* ''Per-graph cluster config'' — each graph stores clusters in its own config tiddler
+* ''Nested clusters'' — clusters inside clusters
+* ''COSE layout'' — Compound Spring Embedder that handles nested groups natively
 * Full event support: hover, click, drag, double-click
 * Position persistence and physics simulation
-* Declarative stylesheet with per-element style overrides
 
 !! Quick Start
 
@@ -20,19 +21,24 @@ An alternative graph rendering engine for [[tw-graph|$:/plugins/flibbles/graph]]
 # Go to ''Settings > Graph Engine'' and select ''Cytoscape''
 # All existing graphs render with Cytoscape.js
 
-!! Compound Nodes
+!! Interactive Clusters
 
-The key differentiator over vis-network. Add a `cluster` attribute to any `<$node>` — its value must be the `$tiddler` of another node in the same graph:
+Enable with `clusterData` graph property pointing to a config tiddler:
 
 ```
 <$graph>
-  <$node $tiddler="Team" label="Team Alpha"/>
-  <$node $tiddler="Person1" label="Alice" cluster="Team"/>
-  <$node $tiddler="Person2" label="Bob" cluster="Team"/>
+<$properties $for="graph" clusterData="$:/config/my-clusters">
+  <$node $tiddler="Alice" label="Alice"/>
+  <$node $tiddler="Bob" label="Bob"/>
+</$properties>
 </$graph>
 ```
 
-Alice and Bob render inside a container labeled "Team Alpha". The `cluster` attribute is separate from the domain model's `parent` field — it controls visual grouping only and is ignored by vis-network.
+|!Gesture |!Effect |
+|Drag node onto node |Creates cluster containing both |
+|Drag node onto cluster |Adds to cluster |
+|Drag 200+ px from grab point |Removes from cluster |
+|Double-click cluster label |Rename + color picker |
 
 !! Prerequisites
 

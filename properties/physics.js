@@ -24,11 +24,11 @@ exports.properties = {
 };
 
 exports.init = function(cy) {
-	this._physicsCy = cy;
+	this._cy = cy;
 };
 
 exports.process = function(objects, changes) {
-	if (!changes.graph || !this._physicsCy) { return; }
+	if (!changes.graph || !this._cy) { return; }
 	var graph = changes.graph;
 	// Don't run physics if hierarchy is active or physics is off
 	if (graph.physics === false || graph.hierarchy) { return; }
@@ -45,7 +45,7 @@ exports.process = function(objects, changes) {
 	}
 	// Run cose layout if needed (on first init when nodes have no positions)
 	if (needsLayout && !objects.graph) {
-		var cy = this._physicsCy;
+		var cy = this._cy;
 		// Map vis-network physics params to cose equivalents
 		var gravity = (graph.centralGravity || 0.3) * 100;
 		var nodeRepulsion = Math.abs(graph.gravitationalConstant || 2000) * 2;

@@ -20,12 +20,12 @@ exports.properties = {
 };
 
 exports.init = function(cy) {
-	this._interactionCy = cy;
+	this._cy = cy;
 };
 
 exports.process = function(objects, changes) {
-	if (!changes.graph || !this._interactionCy) { return; }
-	var cy = this._interactionCy;
+	if (!changes.graph || !this._cy) { return; }
+	var cy = this._cy;
 	var graph = changes.graph;
 	if (graph.zoom !== undefined) {
 		cy.userZoomingEnabled(graph.zoom);

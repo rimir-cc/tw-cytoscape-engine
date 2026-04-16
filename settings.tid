@@ -14,6 +14,23 @@ Or set the config tiddler directly:
 |!Tiddler |`$:/config/flibbles/graph/engine` |
 |!Value |`Cytoscape` |
 
+!! Cluster Configuration
+
+Each graph can store its cluster config in a separate tiddler via the `clusterData` graph property:
+
+```
+<$properties $for="graph" clusterData="$:/config/my-app/clusters">
+```
+
+Multiple graphs can share the same config tiddler for synchronized clusters, or use different tiddlers for independent grouping.
+
 !! Compound Node Styling
 
-Compound (parent) nodes use a semi-transparent background with rounded rectangle shape by default. To customize, override the `node:parent` selector in the Cytoscape stylesheet via graph-level properties.
+Cluster containers render with:
+
+* Dashed round-rectangle border
+* Semi-transparent background (12% opacity)
+* Bold label at top inside the container
+* Minimum 120×80px size when empty
+
+Colors are configurable per cluster via double-click → color picker.

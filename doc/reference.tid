@@ -20,38 +20,108 @@ type: text/vnd.tiddlywiki
 |`borderColor` |color | |Border color |
 |`borderWidth` |number |1 |Border thickness |
 |`size` |number |25 |Node radius (Cytoscape renders at size × 2) |
-|`shape` |enum |dot |`dot`/`box`/`ellipse`/`circle`/`diamond`/`triangle`/`star`/`hexagon`/`database` |
-|`fixed` |boolean |false |Lock node position |
+|`shape` |enum |dot |`dot` / `box` / `ellipse` / `circle` / `diamond` / `triangle` / `star` / `hexagon` / `database` |
+|`fixed` |boolean |false |Lock node position (prevent dragging) |
 |`image` |image | |Background image |
-|`cluster` |string | |ID of parent node for compound grouping (Cytoscape-only) |
+|`cluster` |string | |Cytoscape compound parent ID for static grouping (see ''Clusters'' section) |
 
 !! Edge properties
 
 |!Property |!Type |!Default |!Notes |
-|`label` |string | |Text on edge (auto-rotated) |
-|`color` |color | |Line and arrow color |
+|`label` |string | |Text on edge (auto-rotated to follow edge direction) |
+|`color` |color | |Line color + arrow color |
 |`width` |number |1 |Line thickness |
-|`arrows` |enum |to |`no`/`to`/`from`/`middle` (supports multiple) |
-|`stroke` |enum |solid |`solid`/`dashed`/`dotted` |
+|`arrows` |enum |to |`no` / `to` / `from` / `middle` (supports multiple, comma-separated) |
+|`stroke` |enum |solid |`solid` / `dashed` / `dotted` |
 |`hidden` |boolean |false |Hide edge |
 
 !! Graph properties
 
 |!Property |!Type |!Default |!Notes |
 |`physics` |boolean |true |Enable COSE physics layout |
-|`hierarchy` |boolean |false |Hierarchical layout |
-|`hierarchyDirection` |enum |UD |`UD`/`DU`/`LR`/`RL` |
+|`hierarchy` |boolean |false |Hierarchical layout (uses breadthfirst) |
+|`hierarchyDirection` |enum |UD |`UD` / `DU` / `LR` / `RL` |
 |`zoom` |boolean |true |Enable mouse wheel zoom |
 |`zoomSpeed` |number |1 |Zoom sensitivity (0–10) |
 |`navigation` |boolean |true |Enable panning |
-|`nodeColor` |color | |Default node color |
-|`edgeColor` |color | |Default edge color |
-|`fontColor` |color | |Default text color |
+|`nodeColor` |color | |Default node color for all nodes |
+|`edgeColor` |color | |Default edge color for all edges |
+|`fontColor` |color | |Default text color for labels |
+|`clusterData` |string | |Tiddler path for interactive cluster config (JSON). Each graph can use its own tiddler. |
+
+!! Clusters
+
+Clusters are named visual groups stored in a JSON config tiddler. They are ''not'' TiddlyWiki tiddlers — they exist only as entries in the config.
+
+!!! Enabling interactive clusters
+
+Set `clusterData` on `<$properties $for="graph">` pointing to a config tiddler:
+
+```
+<$graph>
+<$properties $for="graph" clusterData="$:/config/my-app/clusters">
+  ...
+</$properties>
+</$graph>
+```
+
+Each graph can point to its own tiddler for independent clusters, or share a tiddler for synchronized clusters.
+
+!!! Config tiddler format
+
+```json
+{
+  "clusters": {
+    "Cluster #1": { "label": "Cluster #1", "color": "#2B7CE9" },
+    "Team B": { "label": "Team B", "color": null, "parent": "Cluster #1" }
+  },
+  "assignments": {
+    "tiddler-id-1": "Cluster #1",
+    "tiddler-id-2": "Cluster #1",
+    "tiddler-id-3": "Team B"
+  }
+}
+```
+
+|!Field |!Purpose |
+|`clusters` |Named cluster definitions with label, color, and optional parent (for nesting) |
+|`assignments` |Maps node IDs (tiddler titles) to cluster names |
+|`clusters.*.color` |Border and background tint color (`null` for default gray) |
+|`clusters.*.parent` |Name of parent cluster (for nested clusters) |
+
+!!! Interaction gestures
+
+|!Gesture |!Effect |
+|Drag node onto node |Auto-creates cluster containing both (named "Cluster #N") |
+|Drag node onto cluster |Adds node to existing cluster |
+|Drag node onto sibling in cluster |Adds to the same cluster |
+|Drag node 200+ px from grab point |Removes node from cluster |
+|Double-click cluster label |Opens inline rename + color picker |
+|Drag cluster onto cluster |Nests the dragged cluster inside the target |
+|Remove all members |Cluster auto-deletes |
+
+!!! Visual feedback
+
+When dragging a node inside a cluster:
+
+* ''< 50% of ejection distance'' — normal cluster border
+* ''50–85%'' — border turns orange, stays dashed
+* ''> 85%'' — border turns solid red, thickens
+* ''On drop'' — border resets to normal
+
+!!! Static clusters (no interaction)
+
+For hardcoded grouping without `clusterData`, set `cluster` directly on `<$node>`. The container node ID must use the `__cluster__` prefix:
+
+```
+<$node $tiddler="__cluster__GroupName" label="Group Name"/>
+<$node $tiddler="ChildA" label="A" cluster="__cluster__GroupName"/>
+```
 
 !! Shape mapping
 
-|!tw-graph |!Cytoscape |
-|`dot` |`ellipse` |
+|!tw-graph value |!Cytoscape shape |
+|`dot` (default) |`ellipse` |
 |`circle` |`ellipse` |
 |`ellipse` |`ellipse` |
 |`box` |`rectangle` |
@@ -64,6 +134,8 @@ type: text/vnd.tiddlywiki
 
 !! Engine selection
 
-Set `$:/config/flibbles/graph/engine` to `Cytoscape` or use the tw-graph settings UI.
+Set `$:/config/flibbles/graph/engine` to `Cytoscape` or use ControlPanel > Settings > Graph Engine.
+
+Both engines can coexist — switching back to `Vis-Network` works without any changes to graph markup. Cluster-specific features (`cluster` attribute, `clusterData` property) are silently ignored by vis-network.
 
 </$fill>

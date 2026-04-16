@@ -5,8 +5,10 @@ An alternative graph rendering engine for [tw-graph](https://github.com/flibbles
 ## Key Features
 
 - **Drop-in replacement** for vis-network — existing `<$graph>` markup works unchanged
-- **Compound/container nodes** — group nodes visually by setting a `parent` attribute on `<$node>`
-- **COSE layout** — Compound Spring Embedder layout that handles nested node groups natively
+- **Interactive clusters** — drag nodes onto each other to group, double-click to rename/color, drag away to remove
+- **Per-graph cluster config** — each graph stores clusters in its own config tiddler
+- **Nested clusters** — clusters inside clusters
+- **COSE layout** — Compound Spring Embedder that handles nested groups natively
 - Full event support: hover, click, drag, double-click
 - Position persistence and physics simulation
 
@@ -16,19 +18,25 @@ An alternative graph rendering engine for [tw-graph](https://github.com/flibbles
 2. Go to **Settings > Graph Engine** and select **Cytoscape**
 3. All existing graphs render with Cytoscape.js
 
-## Compound Nodes
+## Interactive Clusters
 
-The key differentiator over vis-network:
+Enable with `clusterData` graph property pointing to a config tiddler:
 
 ```html
 <$graph>
-  <$node $tiddler="Team" label="Team Alpha"/>
-  <$node $tiddler="Person1" label="Alice" parent="Team"/>
-  <$node $tiddler="Person2" label="Bob" parent="Team"/>
+<$properties $for="graph" clusterData="$:/config/my-clusters">
+  <$node $tiddler="Alice" label="Alice"/>
+  <$node $tiddler="Bob" label="Bob"/>
+</$properties>
 </$graph>
 ```
 
-Alice and Bob render inside a container labeled "Team Alpha".
+| Gesture | Effect |
+|---------|--------|
+| Drag node onto node | Creates cluster containing both |
+| Drag node onto cluster | Adds to cluster |
+| Drag 200+ px from grab point | Removes from cluster |
+| Double-click cluster label | Rename + color picker |
 
 ## Prerequisites
 

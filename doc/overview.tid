@@ -18,25 +18,28 @@ type: text/vnd.tiddlywiki
 
 The cytoscape engine plugin provides an alternative rendering backend for [[tw-graph|$:/plugins/flibbles/graph]]. It replaces vis-network with [[Cytoscape.js|https://js.cytoscape.org/]] (v3.33.2) while keeping the same `<$graph>` widget API — all existing graph markup works unchanged.
 
-!! Key differentiator
+!! Key features
 
-''Compound/container nodes'' — Cytoscape.js natively supports grouping nodes inside a visual container via the `cluster` attribute. vis-network has no equivalent.
+* ''Drop-in replacement'' — switch engine in tw-graph settings, existing `<$graph>` markup works as-is
+* ''Interactive clusters'' — drag a node onto another to group them visually, double-click to rename, color picker
+* ''Per-graph cluster config'' — each graph stores clusters in its own config tiddler (like positions)
+* ''Nested clusters'' — clusters inside clusters
+* ''Visual drag feedback'' — cluster border turns orange→red as a node approaches the ejection distance
+* ''COSE layout'' — physics simulation that handles compound node groups natively
+* ''Blur debouncing'' — stable popup interaction (200ms debounce prevents popup flicker)
 
-```
-<$graph>
-  <$node $tiddler="Team" label="Team Alpha"/>
-  <$node $tiddler="Person1" label="Alice" cluster="Team"/>
-  <$node $tiddler="Person2" label="Bob" cluster="Team"/>
-</$graph>
-```
+!! How clusters work
 
-!! What's included
+Clusters are named visual groups — not tiddlers. They exist only in a config tiddler as JSON.
 
-* Full `graphengine` module adapter implementing tw-graph's engine interface
-* 10 property handlers: events, positions, nodes, edges, colors, layout, physics, interaction, defaults, IDs
-* Cytoscape.js 3.33.2 UMD build as a TiddlyWiki library module
-* COSE layout (Compound Spring Embedder) — physics simulation that handles compound nodes natively
-* Blur debouncing for stable popup interaction
+|!Action |!Gesture |
+|Create cluster |Drag node A onto node B → auto-creates "Cluster #1" containing both |
+|Add to cluster |Drag node onto existing cluster container |
+|Remove from cluster |Drag node far away from cluster (200+ px from grab point) |
+|Rename cluster |Double-click cluster label → inline text input |
+|Change cluster color |Double-click cluster → color palette below name input |
+|Nest clusters |Drag one cluster container onto another |
+|Delete cluster |Remove all members → cluster auto-deletes |
 
 !! Prerequisites
 
