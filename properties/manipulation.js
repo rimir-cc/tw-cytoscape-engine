@@ -36,6 +36,9 @@ exports.init = function(cy) {
 };
 
 exports.process = function(objects, changes) {
+	if (!this._manipCounts) {
+		this._manipCounts = { deleteNode: 0, deleteEdge: 0, editNode: 0 };
+	}
 	// Track manipulation action counts on objects
 	if (changes.nodes) {
 		for (var id in changes.nodes) {
