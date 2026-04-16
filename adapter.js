@@ -105,6 +105,7 @@ function buildEdgeElement(id, edge) {
 	if (edge.width !== undefined) { data._width = edge.width; }
 	if (edge.arrows !== undefined) { data._arrows = edge.arrows; }
 	if (edge.stroke !== undefined) { data._stroke = edge.stroke; }
+	if (edge.smooth !== undefined) { data._smooth = edge.smooth; }
 	if (edge.hidden !== undefined) { data._hidden = edge.hidden; }
 	return { group: "edges", data: data };
 }
@@ -194,6 +195,11 @@ function applyNodeStyle(ele) {
 	if (data._image) {
 		style["background-image"] = data._image;
 		style["background-fit"] = "cover";
+		style["background-clip"] = data._circular ? "node" : "none";
+		style["border-width"] = data._circular ? 2 : 0;
+		if (!data._shape || data._shape === "image" || data._shape === "circularImage") {
+			style["shape"] = data._circular ? "ellipse" : "rectangle";
+		}
 	}
 	if (data._hidden) { style["display"] = "none"; }
 	if (Object.keys(style).length > 0) {
@@ -224,6 +230,17 @@ function applyEdgeStyle(ele) {
 		if (data._stroke === "dashed") { style["line-style"] = "dashed"; }
 		else if (data._stroke === "dotted") { style["line-style"] = "dotted"; }
 		else { style["line-style"] = "solid"; }
+	}
+	if (data._smooth) {
+		var smoothMap = {
+			"no": "haystack",
+			"dynamic": "bezier",
+			"continuous": "bezier",
+			"curvedCW": "unbundled-bezier",
+			"curvedCCW": "unbundled-bezier",
+			"cubicBezier": "unbundled-bezier"
+		};
+		style["curve-style"] = smoothMap[data._smooth] || "bezier";
 	}
 	if (data._hidden) { style["display"] = "none"; }
 	if (Object.keys(style).length > 0) {
