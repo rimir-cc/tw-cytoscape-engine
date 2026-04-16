@@ -1,0 +1,69 @@
+created: 20260416120000000
+modified: 20260416120000000
+rdt.order: 4
+rdt.plugin-key: cytoscape-engine
+rdt.plugin-name: cytoscape engine
+rdt.plugin-subtitle: Cytoscape.js graph engine adapter for tw-graph with compound node support
+rdt.section: Reference
+title: $:/plugins/rimir/cytoscape-engine/doc/reference
+type: text/vnd.tiddlywiki
+
+<$transclude $tiddler="$:/plugins/rimir/doc-template/templates/page">
+<$fill $name="body">
+
+!! Node properties
+
+|!Property |!Type |!Default |!Notes |
+|`label` |string | |Display text below node |
+|`color` |color | |Background color |
+|`fontColor` |color |auto |Text color (auto-derived from background contrast) |
+|`borderColor` |color | |Border color |
+|`borderWidth` |number |1 |Border thickness |
+|`size` |number |25 |Node radius (Cytoscape renders at size × 2) |
+|`shape` |enum |dot |`dot`/`box`/`ellipse`/`circle`/`diamond`/`triangle`/`star`/`hexagon`/`database` |
+|`fixed` |boolean |false |Lock node position |
+|`image` |image | |Background image |
+|`cluster` |string | |ID of parent node for compound grouping (Cytoscape-only) |
+
+!! Edge properties
+
+|!Property |!Type |!Default |!Notes |
+|`label` |string | |Text on edge (auto-rotated) |
+|`color` |color | |Line and arrow color |
+|`width` |number |1 |Line thickness |
+|`arrows` |enum |to |`no`/`to`/`from`/`middle` (supports multiple) |
+|`stroke` |enum |solid |`solid`/`dashed`/`dotted` |
+|`hidden` |boolean |false |Hide edge |
+
+!! Graph properties
+
+|!Property |!Type |!Default |!Notes |
+|`physics` |boolean |true |Enable COSE physics layout |
+|`hierarchy` |boolean |false |Hierarchical layout |
+|`hierarchyDirection` |enum |UD |`UD`/`DU`/`LR`/`RL` |
+|`zoom` |boolean |true |Enable mouse wheel zoom |
+|`zoomSpeed` |number |1 |Zoom sensitivity (0–10) |
+|`navigation` |boolean |true |Enable panning |
+|`nodeColor` |color | |Default node color |
+|`edgeColor` |color | |Default edge color |
+|`fontColor` |color | |Default text color |
+
+!! Shape mapping
+
+|!tw-graph |!Cytoscape |
+|`dot` |`ellipse` |
+|`circle` |`ellipse` |
+|`ellipse` |`ellipse` |
+|`box` |`rectangle` |
+|`square` |`rectangle` |
+|`diamond` |`diamond` |
+|`triangle` |`triangle` |
+|`star` |`star` |
+|`hexagon` |`hexagon` |
+|`database` |`barrel` |
+
+!! Engine selection
+
+Set `$:/config/flibbles/graph/engine` to `Cytoscape` or use the tw-graph settings UI.
+
+</$fill>

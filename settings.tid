@@ -1,0 +1,19 @@
+title: $:/plugins/rimir/cytoscape-engine/settings
+type: text/vnd.tiddlywiki
+
+! Settings
+
+!! Engine Selection
+
+Select the graph engine in the tw-graph plugin settings:
+
+''ControlPanel > Settings > Graph Engine > Cytoscape''
+
+Or set the config tiddler directly:
+
+|!Tiddler |`$:/config/flibbles/graph/engine` |
+|!Value |`Cytoscape` |
+
+!! Compound Node Styling
+
+Compound (parent) nodes use a semi-transparent background with rounded rectangle shape by default. To customize, override the `node:parent` selector in the Cytoscape stylesheet via graph-level properties.

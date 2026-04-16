@@ -1,0 +1,67 @@
+created: 20260416120000000
+modified: 20260416120000000
+rdt.order: 3
+rdt.plugin-key: cytoscape-engine
+rdt.plugin-name: cytoscape engine
+rdt.plugin-subtitle: Cytoscape.js graph engine adapter for tw-graph with compound node support
+rdt.section: Examples
+title: $:/plugins/rimir/cytoscape-engine/doc/examples
+type: text/vnd.tiddlywiki
+
+<$transclude $tiddler="$:/plugins/rimir/doc-template/templates/page">
+<$fill $name="body">
+
+!! Basic graph
+
+Standard tw-graph markup — works identically to vis-network:
+
+```
+<$graph>
+  <$node $tiddler="A" label="Node A"/>
+  <$node $tiddler="B" label="Node B"/>
+  <$edge $from="A" $to="B"/>
+</$graph>
+```
+
+!! Compound nodes (clusters)
+
+The `cluster` attribute groups nodes visually inside a container:
+
+```
+<$graph>
+  <$node $tiddler="Engineering" label="Engineering"/>
+  <$node $tiddler="Alice" label="Alice" cluster="Engineering"/>
+  <$node $tiddler="Bob" label="Bob" cluster="Engineering"/>
+  <$node $tiddler="Sales" label="Sales"/>
+  <$node $tiddler="Carol" label="Carol" cluster="Sales"/>
+</$graph>
+```
+
+Alice and Bob render inside an "Engineering" container, Carol inside "Sales".
+
+!! Nested clusters
+
+Clusters can nest — a cluster node can itself have a `cluster` attribute:
+
+```
+<$graph>
+  <$node $tiddler="Company" label="ACME Corp"/>
+  <$node $tiddler="Engineering" label="Engineering" cluster="Company"/>
+  <$node $tiddler="Frontend" label="Frontend" cluster="Engineering"/>
+  <$node $tiddler="Backend" label="Backend" cluster="Engineering"/>
+</$graph>
+```
+
+!! Property mapping from vis-network
+
+All standard tw-graph properties work:
+
+|!Property |!Example |!Effect |
+|`color` |`color="DarkViolet"` |Node/edge color |
+|`size` |`size="30"` |Node radius (Cytoscape width = size × 2) |
+|`shape` |`shape="box"` |Maps to Cytoscape shapes (dot→ellipse, box→rectangle) |
+|`arrows` |`arrows="to"` |Arrow direction on edges |
+|`stroke` |`stroke="dashed"` |Edge line style |
+|`label` |`label="text"` |Node/edge label (below node, on edge) |
+
+</$fill>

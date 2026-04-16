@@ -1,0 +1,46 @@
+created: 20260416120000000
+modified: 20260416120000000
+rdt.hub-category: ui-framework
+rdt.hub-category-name: UI Framework & Domain Model
+rdt.hub-order: 10
+rdt.order: 1
+rdt.plugin-key: cytoscape-engine
+rdt.plugin-name: cytoscape engine
+rdt.plugin-subtitle: Cytoscape.js graph engine adapter for tw-graph with compound node support
+rdt.section: Overview
+title: $:/plugins/rimir/cytoscape-engine/doc/overview
+type: text/vnd.tiddlywiki
+
+<$transclude $tiddler="$:/plugins/rimir/doc-template/templates/page">
+<$fill $name="body">
+
+!! What it does
+
+The cytoscape engine plugin provides an alternative rendering backend for [[tw-graph|$:/plugins/flibbles/graph]]. It replaces vis-network with [[Cytoscape.js|https://js.cytoscape.org/]] (v3.33.2) while keeping the same `<$graph>` widget API — all existing graph markup works unchanged.
+
+!! Key differentiator
+
+''Compound/container nodes'' — Cytoscape.js natively supports grouping nodes inside a visual container via the `cluster` attribute. vis-network has no equivalent.
+
+```
+<$graph>
+  <$node $tiddler="Team" label="Team Alpha"/>
+  <$node $tiddler="Person1" label="Alice" cluster="Team"/>
+  <$node $tiddler="Person2" label="Bob" cluster="Team"/>
+</$graph>
+```
+
+!! What's included
+
+* Full `graphengine` module adapter implementing tw-graph's engine interface
+* 10 property handlers: events, positions, nodes, edges, colors, layout, physics, interaction, defaults, IDs
+* Cytoscape.js 3.33.2 UMD build as a TiddlyWiki library module
+* COSE layout (Compound Spring Embedder) — physics simulation that handles compound nodes natively
+* Blur debouncing for stable popup interaction
+
+!! Prerequisites
+
+* `$:/plugins/flibbles/graph` (tw-graph) v1.6.0+
+* TiddlyWiki 5.3.0+
+
+</$fill>

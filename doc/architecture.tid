@@ -1,0 +1,61 @@
+created: 20260416120000000
+modified: 20260416120000000
+rdt.order: 2
+rdt.plugin-key: cytoscape-engine
+rdt.plugin-name: cytoscape engine
+rdt.plugin-subtitle: Cytoscape.js graph engine adapter for tw-graph with compound node support
+rdt.section: Architecture
+title: $:/plugins/rimir/cytoscape-engine/doc/architecture
+type: text/vnd.tiddlywiki
+
+<$transclude $tiddler="$:/plugins/rimir/doc-template/templates/page">
+<$fill $name="body">
+
+!! Engine adapter pattern
+
+tw-graph discovers engines via `$tw.modules.createClassesFromModules("graphengine")`. Each engine exports a standard interface:
+
+|!Export |!Purpose |
+|`name` |Engine identifier (`"Cytoscape"`) |
+|`properties` |Aggregated property schema from all `cytoscape-property` modules |
+|`init(element, objects, options)` |Create Cytoscape instance, wire events, apply styles |
+|`update(objects)` |Delta updates — add/update/remove nodes and edges |
+|`destroy()` |Tear down Cytoscape instance and clean up timers |
+|`processObjects(changes)` |Delegate to property handlers before engine update |
+|`handleMessage(message, params)` |Route messages to handler modules |
+|`forEachProperty(method, ...args)` |Invoke lifecycle method on all property handlers |
+
+!! Property handler modules
+
+Each `module-type: cytoscape-property` module declares properties and optional lifecycle hooks:
+
+|!Module |!Responsibility |
+|`id.js` |Assign IDs to nodes/edges |
+|`defaults.js` |Apply initial defaults on first init |
+|`events.js` |Map Cytoscape events to tw-graph callbacks with blur debouncing |
+|`position.js` |Track node positions (x/y) for persistence |
+|`nodes.js` |Node visual properties: label, size, shape, cluster |
+|`edges.js` |Edge visual properties: arrows, stroke, width, label |
+|`color.js` |Color mapping with luminance-based font contrast |
+|`layout.js` |Hierarchical layout via breadthfirst |
+|`physics.js` |COSE layout mapped from vis-network physics parameters |
+|`interaction.js` |Zoom, pan, navigation controls |
+
+!! Styling strategy
+
+vis-network uses imperative options per node/edge. Cytoscape uses a declarative stylesheet.
+
+The adapter uses a hybrid approach:
+
+* ''Base stylesheet'' — built from graph-level defaults in `buildStylesheet()`, applied via `cy.style().fromJson()`
+* ''Per-element overrides'' — applied via `ele.style({...})` after data updates, reading from `data._color`, `data._size`, etc.
+
+This avoids expensive stylesheet rebuilds on every node change while keeping the declarative base clean.
+
+!! Blur debouncing
+
+vis-network fires `blurNode` based on canvas-internal hit testing — moving the mouse from a node to a DOM popup overlay doesn't trigger blur. Cytoscape fires `mouseout` immediately when the pointer leaves the node area for any reason.
+
+The events handler debounces blur by 200ms and monitors `.graph-popup` elements via DOM event delegation. If the mouse enters a popup within the delay, the blur is cancelled.
+
+</$fill>

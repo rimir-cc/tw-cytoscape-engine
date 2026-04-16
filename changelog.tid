@@ -1,0 +1,9 @@
+created: 20260416120000000
+modified: 20260416120000000
+title: $:/plugins/rimir/cytoscape-engine/changelog
+type: text/vnd.tiddlywiki
+
+! Changelog
+
+|!Version |!Date |!Changes |
+|v0.1.0 |2026-04-16 |Initial release: Cytoscape.js 3.33.2 engine adapter for tw-graph with compound node support, full event mapping (hover/drag/click/doubleclick), position persistence, COSE physics layout, color contrast auto-detection |
