@@ -147,6 +147,8 @@ exports.init = function(cy) {
 	cy.on("grab", "node", function(evt) {
 		var node = evt.target;
 		clearNodeBlur();
+		grabbedNode = node;
+		if (altHeld) { applyAltVisual(); }
 		// Mark as directly grabbed — children freed from compound drag won't have this
 		node.scratch("_userGrabbed", true);
 		var parent = node.parent();
@@ -168,7 +170,7 @@ exports.init = function(cy) {
 		var parentId = node.scratch("_parentId");
 		if (!parentBB || !parentId) { return; }
 		var pos = node.position();
-		var dist = distOutsideBB(parentBB, pos.x, pos.y);
+		var dist = altHeld ? 0 : distOutsideBB(parentBB, pos.x, pos.y);
 		var parentEle = cy.getElementById(parentId);
 		if (!parentEle.length) { return; }
 		var ratio = Math.min(dist / EJECT_DISTANCE, 1);
@@ -191,6 +193,37 @@ exports.init = function(cy) {
 
 	var adapter = require("$:/plugins/rimir/cytoscape-engine/adapter.js");
 
+	// Track Alt key — holding Alt suppresses cluster assignment/ejection
+	var altHeld = false;
+	var grabbedNode = null;
+
+	function applyAltVisual() {
+		if (grabbedNode && grabbedNode.length) {
+			grabbedNode.style("opacity", 0.4);
+			container.style.cursor = "no-drop";
+		}
+	}
+
+	function removeAltVisual() {
+		if (grabbedNode && grabbedNode.length) {
+			grabbedNode.style("opacity", 1);
+		}
+		container.style.cursor = "";
+	}
+
+	document.addEventListener("keydown", function(e) {
+		if (e.key === "Alt") {
+			altHeld = true;
+			if (grabbedNode) { applyAltVisual(); }
+		}
+	});
+	document.addEventListener("keyup", function(e) {
+		if (e.key === "Alt") {
+			altHeld = false;
+			removeAltVisual();
+		}
+	});
+
 	cy.on("free", "node", function(evt) {
 		var node = evt.target;
 		// Skip nodes freed as side-effect of compound parent drag.
@@ -198,9 +231,11 @@ exports.init = function(cy) {
 		var wasGrabbed = node.scratch("_userGrabbed");
 		node.removeScratch("_userGrabbed");
 		if (!wasGrabbed) { return; }
+		removeAltVisual();
+		grabbedNode = null;
 
 		var pos = node.position();
-		var dropTarget = findDropTarget(cy, node);
+		var dropTarget = altHeld ? null : findDropTarget(cy, node);
 		var clusterHandler = getClusterHandler(self);
 		if (clusterHandler) {
 			var currentParent = node.parent();
@@ -209,7 +244,7 @@ exports.init = function(cy) {
 				if (dropTarget.id() !== currentParentId) {
 					clusterHandler.assignCluster.call(self, node.id(), dropTarget.id());
 				}
-			} else if (currentParentId) {
+			} else if (currentParentId && !altHeld) {
 				var parentBB = node.scratch("_parentBB");
 				if (parentBB) {
 					var dist = distOutsideBB(parentBB, pos.x, pos.y);

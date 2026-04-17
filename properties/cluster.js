@@ -476,6 +476,13 @@ exports.renameCluster = function(oldName, newName) {
 		}
 	}
 
+	// Update parent references in child clusters
+	for (var cname in config.clusters) {
+		if (config.clusters[cname].parent === oldName) {
+			config.clusters[cname].parent = newName;
+		}
+	}
+
 	// Update Cytoscape: remove old, add new, reparent children
 	var cy = this._cy;
 	if (cy) {
@@ -484,6 +491,8 @@ exports.renameCluster = function(oldName, newName) {
 		var oldEle = cy.getElementById(oldId);
 		var pos = oldEle.length ? oldEle.position() : { x: 0, y: 0 };
 		var children = oldEle.length ? oldEle.children() : cy.collection();
+		// Preserve parent cluster nesting
+		var parentId = def.parent ? CLUSTER_PREFIX + def.parent : null;
 
 		// Save child positions before reparenting
 		var childPositions = {};
@@ -497,10 +506,12 @@ exports.renameCluster = function(oldName, newName) {
 		// Remove old cluster node
 		if (oldEle.length) { cy.remove(oldEle); }
 
-		// Add new cluster node
+		// Add new cluster node with correct parent
+		var newData = { id: newId, label: newName };
+		if (parentId) { newData.parent = parentId; }
 		cy.add({
 			group: "nodes",
-			data: { id: newId, label: newName },
+			data: newData,
 			position: pos
 		});
 
