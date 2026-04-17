@@ -304,19 +304,23 @@ var CLUSTER_PREFIX = "__cluster__";
 function findDropTarget(cy, droppedNode) {
 	var pos = droppedNode.position();
 	var droppedId = droppedNode.id();
-	// Exclude self, descendants, and current parent
+	// Exclude self, descendants, current parent, and all ancestor clusters
 	var descendants = droppedNode.descendants();
 	var descendantIds = Object.create(null);
 	descendants.forEach(function(d) { descendantIds[d.id()] = true; });
-	var currentParent = droppedNode.parent();
-	var currentParentId = currentParent.length ? currentParent.id() : null;
+	var ancestorIds = Object.create(null);
+	var walk = droppedNode.parent();
+	while (walk.length) {
+		ancestorIds[walk.id()] = true;
+		walk = walk.parent();
+	}
 
 	var clusterHits = [];
 	var nodeHits = [];
 
 	cy.nodes().forEach(function(n) {
 		if (n.id() === droppedId) { return; }
-		if (n.id() === currentParentId) { return; }
+		if (ancestorIds[n.id()]) { return; }
 		if (descendantIds[n.id()]) { return; }
 		var bb = n.boundingBox();
 		if (pos.x >= bb.x1 && pos.x <= bb.x2 && pos.y >= bb.y1 && pos.y <= bb.y2) {

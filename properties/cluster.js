@@ -31,9 +31,16 @@ exports.properties = {
 
 exports.init = function(cy) {
 	this._cy = cy;
-	this._clusterConfig = { clusters: {}, assignments: {} };
-	this._clusterCounter = 0;
+	// Don't overwrite _clusterConfig — process() runs before init() and already
+	// populated it from the config tiddler.
+	if (!this._clusterConfig) {
+		this._clusterConfig = { clusters: {}, assignments: {} };
+	}
+	if (!this._clusterCounter) {
+		this._clusterCounter = 0;
+	}
 	this._activeInput = null;
+	this._lastSavedJSON = null;
 
 	var self = this;
 
@@ -45,6 +52,19 @@ exports.init = function(cy) {
 		var clusterName = nodeId.substring(CLUSTER_PREFIX.length);
 		exports._startInlineEdit.call(self, node, clusterName);
 	});
+
+	// Watch config tiddler for changes (external edits, other widgets, etc.)
+	var wiki = this.wiki || $tw.wiki;
+	this._configChangeHandler = function(changes) {
+		if (!self._clusterConfigTitle) { return; }
+		if (!changes[self._clusterConfigTitle]) { return; }
+		// Skip changes we just wrote ourselves
+		var tiddler = wiki.getTiddler(self._clusterConfigTitle);
+		var text = tiddler ? (tiddler.fields.text || "{}") : "{}";
+		if (text === self._lastSavedJSON) { return; }
+		exports._syncFromConfig.call(self, cy);
+	};
+	wiki.addEventListener("change", this._configChangeHandler);
 };
 
 /**
@@ -134,6 +154,43 @@ exports._startInlineEdit = function(node, clusterName) {
 		swatchRow.appendChild(swatch);
 	});
 	panel.appendChild(swatchRow);
+
+	// Delete button (bin icon)
+	var deleteBtn = document.createElement("div");
+	deleteBtn.title = "Delete cluster";
+	deleteBtn.style.cssText = "width:22px;height:22px;cursor:pointer;display:flex;" +
+		"align-items:center;justify-content:center;border-radius:4px;flex-shrink:0;" +
+		"border:1px solid #ccc;background:#fff;transition:background 0.15s;";
+	deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+		'stroke="#999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+		'<polyline points="3 6 5 6 21 6"/>' +
+		'<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' +
+		'<line x1="10" y1="11" x2="10" y2="17"/>' +
+		'<line x1="14" y1="11" x2="14" y2="17"/></svg>';
+	deleteBtn.addEventListener("mouseenter", function() {
+		deleteBtn.style.background = "#fee";
+		deleteBtn.querySelector("svg").setAttribute("stroke", "#c00");
+	});
+	deleteBtn.addEventListener("mouseleave", function() {
+		deleteBtn.style.background = "#fff";
+		deleteBtn.querySelector("svg").setAttribute("stroke", "#999");
+	});
+	deleteBtn.addEventListener("click", function(e) {
+		e.stopPropagation();
+		var memberCount = 0;
+		var cfg = self._clusterConfig;
+		for (var id in cfg.assignments) {
+			if (cfg.assignments[id] === clusterName) { memberCount++; }
+		}
+		var msg = memberCount > 0
+			? "Delete cluster \"" + (clusterDef.label || clusterName) + "\" with " + memberCount + " node" + (memberCount > 1 ? "s" : "") + "?\nNodes will be kept but ungrouped."
+			: "Delete empty cluster \"" + (clusterDef.label || clusterName) + "\"?";
+		if (confirm(msg)) {
+			exports._removeInlineEdit.call(self);
+			exports.deleteCluster.call(self, clusterName);
+		}
+	});
+	panel.appendChild(deleteBtn);
 
 	function commit() {
 		var newLabel = input.value.trim();
@@ -281,6 +338,83 @@ exports.postApply = function(cy) {
 			ele.style(style);
 		}
 	}
+};
+
+/**
+ * Sync Cytoscape state from the config tiddler.
+ * Called when the config tiddler changes externally.
+ */
+exports._syncFromConfig = function(cy) {
+	var wiki = this.wiki || $tw.wiki;
+	var tiddler = wiki.getTiddler(this._clusterConfigTitle);
+	var config = { clusters: {}, assignments: {} };
+	if (tiddler) {
+		try {
+			config = JSON.parse(tiddler.fields.text || "{}");
+			if (!config.clusters) { config.clusters = {}; }
+			if (!config.assignments) { config.assignments = {}; }
+		} catch (e) {
+			config = { clusters: {}, assignments: {} };
+		}
+	}
+	this._clusterConfig = config;
+
+	// Remove cluster nodes not in config
+	cy.nodes().forEach(function(n) {
+		var id = n.id();
+		if (id.indexOf(CLUSTER_PREFIX) !== 0) { return; }
+		var name = id.substring(CLUSTER_PREFIX.length);
+		if (!config.clusters[name]) {
+			n.children().forEach(function(child) {
+				movePreservingPosition(child, null);
+			});
+			cy.remove(n);
+		}
+	});
+
+	// Add cluster nodes in config but not in Cytoscape
+	for (var name in config.clusters) {
+		var clusterId = CLUSTER_PREFIX + name;
+		var clusterDef = config.clusters[name];
+		if (!cy.getElementById(clusterId).length) {
+			cy.add({
+				group: "nodes",
+				data: { id: clusterId, label: clusterDef.label || name }
+			});
+		} else {
+			// Update label if changed
+			cy.getElementById(clusterId).data("label", clusterDef.label || name);
+		}
+	}
+
+	// Sync cluster nesting
+	for (var name in config.clusters) {
+		var clusterId = CLUSTER_PREFIX + name;
+		var clusterDef = config.clusters[name];
+		var clusterNode = cy.getElementById(clusterId);
+		if (!clusterNode.length) { continue; }
+		var expectedParent = (clusterDef.parent && config.clusters[clusterDef.parent])
+			? CLUSTER_PREFIX + clusterDef.parent : null;
+		var currentParent = clusterNode.parent().length ? clusterNode.parent().id() : null;
+		if (currentParent !== expectedParent) {
+			moveCompoundPreservingChildren(cy, clusterNode, expectedParent);
+		}
+	}
+
+	// Sync node assignments
+	cy.nodes().forEach(function(n) {
+		var id = n.id();
+		if (id.indexOf(CLUSTER_PREFIX) === 0) { return; }
+		var expectedCluster = config.assignments[id];
+		var expectedParent = expectedCluster ? CLUSTER_PREFIX + expectedCluster : null;
+		var currentParent = n.parent().length ? n.parent().id() : null;
+		if (currentParent !== expectedParent) {
+			movePreservingPosition(n, expectedParent);
+		}
+	});
+
+	// Re-apply cluster styles
+	exports.postApply.call(this, cy);
 };
 
 /**
@@ -448,6 +582,56 @@ function movePreservingPosition(node, parentId) {
 	node.unlock();
 }
 
+/**
+ * Dissolve a cluster if it has 0 or 1 direct children left
+ * (counting both assigned nodes AND nested sub-clusters).
+ * Unparents the sole remaining child (if any) and deletes the cluster.
+ */
+function dissolveIfTooSmall(self, cy, config, clusterName) {
+	if (!clusterName || !config.clusters[clusterName]) { return; }
+
+	// Count direct node assignments
+	var nodeMembers = [];
+	for (var id in config.assignments) {
+		if (config.assignments[id] === clusterName) {
+			nodeMembers.push(id);
+		}
+	}
+
+	// Count nested sub-clusters
+	var childClusters = [];
+	for (var name in config.clusters) {
+		if (config.clusters[name].parent === clusterName) {
+			childClusters.push(name);
+		}
+	}
+
+	var totalChildren = nodeMembers.length + childClusters.length;
+	if (totalChildren > 1) { return; }
+
+	// 0 or 1 children — dissolve
+	// Unparent the sole remaining node member
+	if (nodeMembers.length === 1 && childClusters.length === 0) {
+		var lastId = nodeMembers[0];
+		delete config.assignments[lastId];
+		var lastNode = cy.getElementById(lastId);
+		if (lastNode.length) {
+			movePreservingPosition(lastNode, null);
+		}
+	}
+	// Unparent the sole remaining child cluster
+	if (childClusters.length === 1 && nodeMembers.length === 0) {
+		var childName = childClusters[0];
+		delete config.clusters[childName].parent;
+		var childNode = cy.getElementById(CLUSTER_PREFIX + childName);
+		if (childNode.length) {
+			moveCompoundPreservingChildren(cy, childNode, null);
+		}
+	}
+
+	exports.deleteCluster.call(self, clusterName);
+}
+
 exports.assignCluster = function(nodeId, targetId) {
 	var cy = this._cy;
 	if (!cy) { return; }
@@ -456,11 +640,19 @@ exports.assignCluster = function(nodeId, targetId) {
 	var node = cy.getElementById(nodeId);
 	if (!node.length || !node.isNode()) { return; }
 
-	// For cluster nodes, store nesting in config as well
 	var isClusterNode = nodeId.indexOf(CLUSTER_PREFIX) === 0;
 
+	// Remember old cluster so we can check if it needs dissolving after reassignment
+	var oldClusterName = null;
+	if (isClusterNode) {
+		var myName = nodeId.substring(CLUSTER_PREFIX.length);
+		oldClusterName = config.clusters[myName] ? config.clusters[myName].parent || null : null;
+	} else {
+		oldClusterName = config.assignments[nodeId] || null;
+	}
+
 	if (targetId) {
-		// Prevent circular nesting: target must not be a descendant of node
+		// Prevent circular nesting
 		if (isClusterNode) {
 			var descendants = node.descendants();
 			var isCircular = false;
@@ -472,38 +664,46 @@ exports.assignCluster = function(nodeId, targetId) {
 
 		var clusterName;
 		if (targetId.indexOf(CLUSTER_PREFIX) === 0) {
-			// Dropped onto a cluster container
 			clusterName = targetId.substring(CLUSTER_PREFIX.length);
 		} else {
-			// Dropped onto a regular node
 			var targetParent = cy.getElementById(targetId).parent();
-			if (targetParent.length && targetParent.id().indexOf(CLUSTER_PREFIX) === 0) {
-				// Target is in a cluster — join same cluster
+			var targetInCluster = targetParent.length && targetParent.id().indexOf(CLUSTER_PREFIX) === 0;
+			var sameCluster = targetInCluster && oldClusterName &&
+				targetParent.id() === CLUSTER_PREFIX + oldClusterName;
+
+			if (targetInCluster && !sameCluster) {
+				// Target is in a different cluster — join that cluster
 				clusterName = targetParent.id().substring(CLUSTER_PREFIX.length);
 			} else if (isClusterNode) {
-				// Cluster dropped onto a regular node — don't auto-create, skip
 				return;
 			} else {
-				// Neither in a cluster — auto-create with incremented name
+				// Both nodes are unassigned, or both in the same cluster
+				// → auto-create a new (sub-)cluster
 				clusterName = exports._nextClusterName.call(this);
 				var targetNode = cy.getElementById(targetId);
 				var tPos = targetNode.position();
 				var nPos = node.position();
-				// Place cluster at midpoint of the two nodes
 				var midX = (tPos.x + nPos.x) / 2;
 				var midY = (tPos.y + nPos.y) / 2;
-				exports.createCluster.call(this, clusterName, {
+				var createOpts = {
 					label: clusterName,
 					position: { x: midX, y: midY }
-				});
-				// Offset nodes if they overlap
+				};
+				exports.createCluster.call(this, clusterName, createOpts);
+				// Nest new cluster inside parent cluster if both nodes are in one
+				if (sameCluster && oldClusterName) {
+					config.clusters[clusterName].parent = oldClusterName;
+					var clusterNode = cy.getElementById(CLUSTER_PREFIX + clusterName);
+					if (clusterNode.length) {
+						moveCompoundPreservingChildren(cy, clusterNode, CLUSTER_PREFIX + oldClusterName);
+					}
+				}
 				if (Math.abs(tPos.x - nPos.x) < 20 && Math.abs(tPos.y - nPos.y) < 20) {
 					tPos = { x: midX - 40, y: midY };
 					nPos = { x: midX + 40, y: midY };
 					targetNode.position(tPos);
 					node.position(nPos);
 				}
-				// Assign the target node too
 				config.assignments[targetId] = clusterName;
 				movePreservingPosition(targetNode, CLUSTER_PREFIX + clusterName);
 			}
@@ -511,15 +711,18 @@ exports.assignCluster = function(nodeId, targetId) {
 
 		if (clusterName && config.clusters[clusterName]) {
 			if (isClusterNode) {
-				// Nest cluster inside another cluster
 				var myName = nodeId.substring(CLUSTER_PREFIX.length);
 				config.clusters[myName].parent = clusterName;
-				// Apply in Cytoscape: move compound, re-parent orphaned children
 				moveCompoundPreservingChildren(cy, node, CLUSTER_PREFIX + clusterName);
 			} else {
 				config.assignments[nodeId] = clusterName;
 				movePreservingPosition(node, CLUSTER_PREFIX + clusterName);
 			}
+		}
+
+		// Dissolve old cluster if the node left it with too few members
+		if (oldClusterName && oldClusterName !== clusterName) {
+			dissolveIfTooSmall(this, cy, config, oldClusterName);
 		}
 	} else {
 		// Remove from cluster
@@ -528,20 +731,13 @@ exports.assignCluster = function(nodeId, targetId) {
 			delete config.clusters[myName].parent;
 			moveCompoundPreservingChildren(cy, node, null);
 		} else {
-			var oldCluster = config.assignments[nodeId];
 			delete config.assignments[nodeId];
 			movePreservingPosition(node, null);
 		}
 
-		// If cluster is now empty, delete it (only for regular node removal)
-		if (!isClusterNode && oldCluster) {
-			var hasMembers = false;
-			for (var id in config.assignments) {
-				if (config.assignments[id] === oldCluster) { hasMembers = true; break; }
-			}
-			if (!hasMembers) {
-				exports.deleteCluster.call(this, oldCluster);
-			}
+		// Dissolve old cluster if too few members remain
+		if (!isClusterNode && oldClusterName) {
+			dissolveIfTooSmall(this, cy, config, oldClusterName);
 		}
 	}
 
@@ -555,6 +751,7 @@ exports._saveClusterConfig = function() {
 	if (!this._clusterConfigTitle) { return; }
 	var wiki = this.wiki || $tw.wiki;
 	var json = JSON.stringify(this._clusterConfig, null, "\t");
+	this._lastSavedJSON = json;
 	wiki.addTiddler(new $tw.Tiddler(
 		wiki.getTiddler(this._clusterConfigTitle) || {},
 		{
@@ -567,4 +764,9 @@ exports._saveClusterConfig = function() {
 
 exports.destroy = function() {
 	exports._removeInlineEdit.call(this);
+	if (this._configChangeHandler) {
+		var wiki = this.wiki || $tw.wiki;
+		wiki.removeEventListener("change", this._configChangeHandler);
+		this._configChangeHandler = null;
+	}
 };
