@@ -338,6 +338,41 @@ exports.postApply = function(cy) {
 			ele.style(style);
 		}
 	}
+
+	// Mark non-member nodes that visually overlap a cluster they don't belong to
+	var clusterBBs = [];
+	for (var cn in config.clusters) {
+		var cid = CLUSTER_PREFIX + cn;
+		var cel = cy.getElementById(cid);
+		if (cel.length) {
+			clusterBBs.push({ name: cn, bb: cel.boundingBox() });
+		}
+	}
+	if (clusterBBs.length > 0) {
+		cy.nodes().forEach(function(n) {
+			var id = n.id();
+			if (id.indexOf(CLUSTER_PREFIX) === 0) { return; }
+			var memberOf = config.assignments[id] || null;
+			var pos = n.position();
+			var overlaps = false;
+			for (var i = 0; i < clusterBBs.length; i++) {
+				var cb = clusterBBs[i];
+				if (cb.name === memberOf) { continue; }
+				var bb = cb.bb;
+				if (pos.x >= bb.x1 && pos.x <= bb.x2 && pos.y >= bb.y1 && pos.y <= bb.y2) {
+					overlaps = true;
+					break;
+				}
+			}
+			if (overlaps) {
+				n.style({ "opacity": 0.45, "border-style": "dashed" });
+				n.scratch("_overlapStyled", true);
+			} else if (n.scratch("_overlapStyled")) {
+				n.style({ "opacity": 1, "border-style": "solid" });
+				n.removeScratch("_overlapStyled");
+			}
+		});
+	}
 };
 
 /**
