@@ -1,0 +1,11 @@
+{
+    "description": "Test edition for cytoscape-engine",
+    "plugins": [
+        "tiddlywiki/jasmine",
+        "rimir/cytoscape-engine"
+    ],
+    "themes": [
+        "tiddlywiki/vanilla",
+        "tiddlywiki/snowwhite"
+    ]
+}
