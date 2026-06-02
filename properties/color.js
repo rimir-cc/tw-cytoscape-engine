@@ -53,14 +53,17 @@ function contrastColor(bgHex) {
 }
 
 exports.process = function(objects, changes) {
-	if (!changes.nodes) { return; }
-	// Auto-derive font color from background if not explicitly set
-	for (var id in changes.nodes) {
-		var node = changes.nodes[id];
-		if (!node || node.fontColor) { continue; }
-		var bg = node.color;
-		if (bg && typeof bg === "string" && bg.charAt(0) === "#") {
-			node.fontColor = contrastColor(bg);
-		}
-	}
+	// NOTE: node labels are rendered BELOW the node (text-valign: bottom,
+	// see the base stylesheet in adapter.js), i.e. on the graph canvas —
+	// not on top of the node fill. So the label must contrast with the
+	// graph BACKGROUND, not with the node's background colour. Auto-
+	// deriving the font colour from the node background (as this used to)
+	// produced white labels for dark-filled nodes sitting on a light
+	// canvas — unreadable, and inconsistent with light-filled nodes
+	// (e.g. person) that happened to get a dark label. The correct,
+	// uniform colour is the graph-level font colour (nodeStyle.color —
+	// graphOpts.fontColor from the palette, else the dark default), which
+	// the theme already contrasts against the canvas. So we leave each
+	// node's fontColor untouched here; an explicit per-node `fontColor`
+	// still wins. contrastColor() is retained for on-node label use.
 };

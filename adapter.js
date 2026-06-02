@@ -312,17 +312,58 @@ exports.init = function(element, objects, options) {
 
 	this.forEachProperty("init", this.cy);
 
-	// Fit viewport to show all nodes (deferred to allow layouts to settle)
-	var cy = this.cy;
-	setTimeout(function() {
-		if (cy.nodes().length > 0) { cy.fit(null, 30); }
-	}, 100);
+	// Fit viewport to show all nodes. Two subtleties make a single
+	// fit() unreliable:
+	//   1. The container frequently gets its real (flex / vh) height
+	//      AFTER cytoscape has measured it at construction, and cytoscape
+	//      has no built-in container ResizeObserver. Without an explicit
+	//      resize()+fit() the viewport stays sized to the stale (often
+	//      zero-height) container and every node lands off-screen.
+	//   2. Side-preview / story-river panes can be laid out or revealed
+	//      after init, changing the container size again.
+	// So: fit once on the next frame, and keep a ResizeObserver that
+	// re-measures and re-frames whenever the container resizes. autoFit
+	// stays on (the view is meant to always show everything); node drags
+	// don't trigger it (update() only refits on a node-COUNT change).
+	this._autoFit = true;
+	this._fitPadding = 30;
+	var self = this;
+	setTimeout(function() { self.fitView(); }, 100);
+	this._installResizeObserver(element);
 
 	this._firstInit = false;
 };
 
+// Re-measure the container and frame all nodes. Safe to call any time.
+exports.fitView = function() {
+	if (!this.cy || this.cy.nodes().length === 0) { return; }
+	this.cy.resize();
+	this.cy.fit(null, this._fitPadding === undefined ? 30 : this._fitPadding);
+};
+
+// Keep the canvas matched to its container and re-frame on resize. This is
+// what actually fixes the "nodes off-view" case: the container's real
+// height usually arrives after cytoscape's construction-time measurement.
+exports._installResizeObserver = function(element) {
+	if (this._resizeObserver || typeof ResizeObserver === "undefined") { return; }
+	var self = this;
+	this._resizeObserver = new ResizeObserver(function() {
+		if (!self.cy) { return; }
+		self.cy.resize();
+		if (self._autoFit) {
+			self.cy.fit(null, self._fitPadding === undefined ? 30 : self._fitPadding);
+		}
+	});
+	this._resizeObserver.observe(element);
+};
+
 exports.update = function(objects) {
 	var changes = this.processObjects(objects);
+
+	// Remember the node count so we can re-frame when the visible set
+	// changes (Context-preview pills, type show/hide) but NOT when a node
+	// is merely dragged/repositioned (same count → layout is preserved).
+	var nodeCountBefore = this.cy ? this.cy.nodes().length : 0;
 
 	// Suppress free event handling during programmatic updates.
 	// move() calls trigger Cytoscape free events which would incorrectly
@@ -438,9 +479,20 @@ exports.update = function(objects) {
 	this.forEachProperty("postApply", this.cy);
 
 	suppressFreeEvents = false;
+
+	// Re-frame when the visible node set changed (added/removed), so the
+	// view always shows everything no matter how far apart the persisted
+	// positions are.
+	if (this._autoFit && this.cy && this.cy.nodes().length !== nodeCountBefore) {
+		this.fitView();
+	}
 };
 
 exports.destroy = function() {
+	if (this._resizeObserver) {
+		this._resizeObserver.disconnect();
+		this._resizeObserver = null;
+	}
 	this.forEachProperty("destroy", this.cy);
 	if (this.cy) {
 		this.cy.destroy();

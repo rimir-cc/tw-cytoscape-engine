@@ -11,6 +11,7 @@ An alternative graph rendering engine for [tw-graph](https://github.com/flibbles
 - **COSE layout** — Compound Spring Embedder that handles nested groups natively
 - Full event support: hover, click, drag, double-click
 - Position persistence and physics simulation
+- **Auto-fit to view** — frames all nodes on load and when the container resizes, and re-frames when the visible node set changes; dragging a node leaves the viewport untouched
 
 ## Quick Start
 

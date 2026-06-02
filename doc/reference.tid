@@ -16,7 +16,7 @@ type: text/vnd.tiddlywiki
 |!Property |!Type |!Default |!Notes |
 |`label` |string | |Display text below node |
 |`color` |color | |Background color |
-|`fontColor` |color |auto |Text color (auto-derived from background contrast) |
+|`fontColor` |color |graph font colour |Label text colour. Labels render //below// the node (on the canvas), so they default to the graph-level font colour (which the theme contrasts against the canvas), not the node fill. Set explicitly to override per node. |
 |`borderColor` |color | |Border color |
 |`borderWidth` |number |1 |Border thickness |
 |`size` |number |25 |Node radius (Cytoscape renders at size × 2) |
