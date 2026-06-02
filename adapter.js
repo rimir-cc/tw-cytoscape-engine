@@ -312,23 +312,24 @@ exports.init = function(element, objects, options) {
 
 	this.forEachProperty("init", this.cy);
 
-	// Fit viewport to show all nodes. Two subtleties make a single
-	// fit() unreliable:
-	//   1. The container frequently gets its real (flex / vh) height
-	//      AFTER cytoscape has measured it at construction, and cytoscape
-	//      has no built-in container ResizeObserver. Without an explicit
-	//      resize()+fit() the viewport stays sized to the stale (often
-	//      zero-height) container and every node lands off-screen.
-	//   2. Side-preview / story-river panes can be laid out or revealed
-	//      after init, changing the container size again.
-	// So: fit once on the next frame, and keep a ResizeObserver that
-	// re-measures and re-frames whenever the container resizes. autoFit
-	// stays on (the view is meant to always show everything); node drags
-	// don't trigger it (update() only refits on a node-COUNT change).
+	// Fit viewport to show all nodes. autoFit stays on (the view is meant to
+	// always show everything); node drags don't trigger it (update() only
+	// refits on a node-COUNT change).
 	this._autoFit = true;
 	this._fitPadding = 30;
-	var self = this;
-	setTimeout(function() { self.fitView(); }, 100);
+	// Eliminate the "render small, then snap to fit" flicker by NEVER painting
+	// the un-framed state. The container is often 0-height at the instant init
+	// runs — its flex/vh height resolves a beat later (the side-preview pane is
+	// the worst case) — and cytoscape can't see that height at construction,
+	// so an immediate fit would frame against a stale size and a deferred fit
+	// leaves the small preset render visible until it fires. Instead: hide the
+	// container now, and reveal it only once we've framed it against a REAL
+	// (non-zero) size. That first framed fit happens either synchronously here
+	// (container already sized) or in the ResizeObserver's first callback (size
+	// arrives later) — either way the first painted frame is already correct.
+	this._revealed = false;
+	element.style.visibility = "hidden";
+	this._fitAndReveal();
 	this._installResizeObserver(element);
 
 	this._firstInit = false;
@@ -341,6 +342,21 @@ exports.fitView = function() {
 	this.cy.fit(null, this._fitPadding === undefined ? 30 : this._fitPadding);
 };
 
+// Frame all nodes ONLY when the container has a real size, and reveal it the
+// first time we do. Called synchronously at init and from the ResizeObserver,
+// so whichever moment the container first has a non-zero size is when the
+// (already-framed) graph becomes visible — no un-framed paint, no flicker.
+exports._fitAndReveal = function() {
+	if (!this.cy) { return; }
+	var el = this.element;
+	if (!el || el.clientHeight <= 0 || el.clientWidth <= 0) { return; }
+	this.fitView();
+	if (!this._revealed) {
+		this._revealed = true;
+		el.style.visibility = "";
+	}
+};
+
 // Keep the canvas matched to its container and re-frame on resize. This is
 // what actually fixes the "nodes off-view" case: the container's real
 // height usually arrives after cytoscape's construction-time measurement.
@@ -348,11 +364,8 @@ exports._installResizeObserver = function(element) {
 	if (this._resizeObserver || typeof ResizeObserver === "undefined") { return; }
 	var self = this;
 	this._resizeObserver = new ResizeObserver(function() {
-		if (!self.cy) { return; }
-		self.cy.resize();
-		if (self._autoFit) {
-			self.cy.fit(null, self._fitPadding === undefined ? 30 : self._fitPadding);
-		}
+		if (self._autoFit) { self._fitAndReveal(); }
+		else if (self.cy) { self.cy.resize(); }
 	});
 	this._resizeObserver.observe(element);
 };
