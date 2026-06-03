@@ -288,12 +288,32 @@ exports.init = function(element, objects, options) {
 	var elements = buildElements(newObjects);
 	var stylesheet = buildStylesheet(newObjects.graph);
 
+	// Cytoscape gets an absolutely-positioned inner container, NOT the
+	// widget element itself. cy.resize() rewrites the canvas dimensions;
+	// when those canvases participate in the surrounding layout (flex
+	// chains, fractional device-pixel ratios) the container's own box can
+	// flip by a pixel on every resize — re-firing the ResizeObserver
+	// below, which calls fitView()/cy.resize() again: a permanent
+	// once-per-frame resize/flicker loop. An absolute child is out of
+	// layout flow, so the canvas can never feed back into the observed
+	// element's size and the loop is impossible by construction.
+	var view = element.ownerDocument.defaultView || window;
+	if (view.getComputedStyle(element).position === "static") {
+		element.style.position = "relative";
+	}
+	var inner = this.innerElement = element.ownerDocument.createElement("div");
+	inner.style.position = "absolute";
+	inner.style.top = "0";
+	inner.style.left = "0";
+	inner.style.right = "0";
+	inner.style.bottom = "0";
+	element.appendChild(inner);
+
 	this.cy = cytoscape({
-		container: element,
+		container: inner,
 		elements: elements,
 		style: stylesheet,
 		layout: { name: "preset" },
-		wheelSensitivity: 1,
 		boxSelectionEnabled: true,
 		selectionType: "additive"
 	});
@@ -331,6 +351,21 @@ exports.init = function(element, objects, options) {
 	element.style.visibility = "hidden";
 	this._fitAndReveal();
 	this._installResizeObserver(element);
+	// Fallback: never leave the canvas permanently hidden. If no real
+	// (non-zero) size arrives shortly after init — a flex chain that never
+	// resolves in this layout, a 0-height container — reveal the graph
+	// as-is rather than showing nothing. fitView() re-frames best-effort;
+	// the ResizeObserver still re-frames if a real size arrives later.
+	if (this._revealTimer) { clearTimeout(this._revealTimer); }
+	var self = this;
+	this._revealTimer = setTimeout(function() {
+		self._revealTimer = null;
+		if (!self._revealed && self.element) {
+			self._revealed = true;
+			self.element.style.visibility = "";
+			self.fitView();
+		}
+	}, 300);
 
 	this._firstInit = false;
 };
@@ -363,7 +398,21 @@ exports._fitAndReveal = function() {
 exports._installResizeObserver = function(element) {
 	if (this._resizeObserver || typeof ResizeObserver === "undefined") { return; }
 	var self = this;
+	this._lastObservedW = -1;
+	this._lastObservedH = -1;
 	this._resizeObserver = new ResizeObserver(function() {
+		// Defense-in-depth: act only when the container's box ACTUALLY
+		// changed since the last callback. The absolute inner container
+		// (see init) is what structurally prevents the canvas from feeding
+		// back into this element's size — a size-equality guard alone does
+		// NOT stop that loop (on fractional-DPR setups the box genuinely
+		// alternates between two values, so every callback sees a change).
+		// This guard just skips redundant re-fits when the observer fires
+		// without a real size change.
+		var w = element.clientWidth, h = element.clientHeight;
+		if (w === self._lastObservedW && h === self._lastObservedH) { return; }
+		self._lastObservedW = w;
+		self._lastObservedH = h;
 		if (self._autoFit) { self._fitAndReveal(); }
 		else if (self.cy) { self.cy.resize(); }
 	});
@@ -502,6 +551,10 @@ exports.update = function(objects) {
 };
 
 exports.destroy = function() {
+	if (this._revealTimer) {
+		clearTimeout(this._revealTimer);
+		this._revealTimer = null;
+	}
 	if (this._resizeObserver) {
 		this._resizeObserver.disconnect();
 		this._resizeObserver = null;
@@ -511,6 +564,10 @@ exports.destroy = function() {
 		this.cy.destroy();
 		this.cy = null;
 	}
+	if (this.innerElement && this.innerElement.parentNode) {
+		this.innerElement.parentNode.removeChild(this.innerElement);
+	}
+	this.innerElement = null;
 };
 
 exports.processObjects = function(changes) {
